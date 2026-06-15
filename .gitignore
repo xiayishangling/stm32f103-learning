@@ -24,3 +24,16 @@ qt/
 6.7-新学习部分-每日作业.txt
 每日心得-stm32-格式化v2.docx
 前-stm32-心得.md
+
+# Keil 编译产物
+**/Objects/
+**/Listings/
+**/DebugConfig/
+*.uvguix.*
+*.uvoptx
+*.scvd
+*.lin
+*.VSIX
+**/.vscode/keil-assistant.log
+**/.vscode/uv4.log*
+**/清理.cmd
