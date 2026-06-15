@@ -18,6 +18,8 @@
 
 > 使用 B站 [铁头山羊](https://space.bilibili.com/471714251) 的库文件
 
+> ⚠️ 每日练习代码分散在 `源码1/user/main.c` 和 `源码1/my_lib/my_code.c / my_code2.c` 中，函数声明较乱，后续会统一整理。
+
 ## 外设覆盖
 
 - [x] GPIO（推挽/开漏/上拉/下拉）
