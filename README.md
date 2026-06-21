@@ -1,6 +1,6 @@
 # STM32F103C8T6 嵌入式开发学习记录
 
-> 🎬 [演示视频（百度网盘）](https://www.bilibili.com/video/BV1M2j863EG5/?vd_source=18a592e264bfc8e9704a31a520b1a63b`
+> 🎬 [演示视频（B站）](https://www.bilibili.com/video/BV1M2j863EG5/)
 
 > **环境**：VSCode + Keil + Keil Assistant → CubeMX + FreeRTOS  
 > **库文件**：B站 [铁头山羊](https://space.bilibili.com/471714251) 标准外设库 / HAL 库  
@@ -42,26 +42,26 @@
 
 ---
 
-## 🔌 硬件接线表
+## 🔌 硬件接线表（Integrated_Project）
 
-| 外设 | 引脚 | 说明 |
-|------|------|------|
-| LED1（红） | PA1 | 推挽输出，低电平点亮 |
-| LED2（蓝） | PA11 | 推挽输出，低电平点亮 |
-| 板载 LED | PC13 | 开漏输出 |
-| 按键1 | PA1 | 上拉输入，按下低电平 |
-| 按键2 | PA2 | 上拉输入，按下低电平 |
-| OLED SCL | PB8 | I2C1 时钟（重映射） |
-| OLED SDA | PB9 | I2C1 数据（重映射） |
-| W25Q64 CS | PA4 | SPI1 片选 |
-| W25Q64 SCK | PA5 | SPI1 时钟 |
-| W25Q64 MISO | PA6 | SPI1 输入 |
-| W25Q64 MOSI | PA7 | SPI1 输出 |
-| HC-SR04 Trig | PA1 | 超声波触发 |
-| HC-SR04 Echo | PA8 | 超声波回波（TIM1 CH1） |
-| 光敏传感器 AO | PA0 | ADC1 通道0 |
-| USART1 TX | PB6 | 串口发送（重映射） |
-| USART1 RX | PB7 | 串口接收（重映射） |
+| 外设 | 引脚 | 模式 | 说明 |
+|------|------|------|------|
+| LED1（红） | PA3 | 推挽输出 | SET=亮 |
+| LED2（蓝） | PA11 | 推挽输出 | 常闪 |
+| 板载 LED | PC13 | 开漏输出 | 故障指示 |
+| 按键1（保存） | PA1 | 上拉输入 | 按下低电平 |
+| 按键2（恢复） | PA2 | 上拉输入 | 按下低电平 |
+| OLED SCL | PB8 | AF_OD | I2C1（重映射） |
+| OLED SDA | PB9 | AF_OD | I2C1（重映射） |
+| W25Q64 CS | PA4 | 推挽输出 | SPI1 片选 |
+| W25Q64 SCK | PA5 | AF_PP | SPI1 时钟 |
+| W25Q64 MISO | PA6 | IPU | SPI1 输入 |
+| W25Q64 MOSI | PA7 | AF_PP | SPI1 输出 |
+| USART1 TX | PB6 | AF_PP | 串口发送（重映射） |
+| USART1 RX | PB7 | IPU | 串口接收（重映射） |
+| 光敏传感器 AO | PA0 | AIN | ADC1 CH0 |
+
+> `01-BareMetal-Practice/` 和 `02-Timer-Exercises/` 为不同时期的独立项目，引脚分配各有不同，以各自工程内 `main.c` 和 `my_lib/` 中的实际配置为准。
 
 ---
 
@@ -105,7 +105,3 @@
 - [x] ADC（常规/注入/扫描/定时器触发）
 - [x] OLED（I2C 驱动、回调适配）
 - [x] FreeRTOS（任务、队列、信号量、互斥锁）
-
-
-
-
