@@ -51,14 +51,14 @@
 | 板载 LED | PC13 | 开漏输出 | 故障指示 |
 | 按键1（保存） | PA1 | 上拉输入 | 按下低电平 |
 | 按键2（恢复） | PA2 | 上拉输入 | 按下低电平 |
-| OLED SCL | PB8 | AF_OD | I2C1（重映射） |
-| OLED SDA | PB9 | AF_OD | I2C1（重映射） |
+| OLED SCL | PB6 | AF_OD | I2C1 |
+| OLED SDA | PB7 | AF_OD | I2C1 |
 | W25Q64 CS | PA4 | 推挽输出 | SPI1 片选 |
 | W25Q64 SCK | PA5 | AF_PP | SPI1 时钟 |
 | W25Q64 MISO | PA6 | IPU | SPI1 输入 |
 | W25Q64 MOSI | PA7 | AF_PP | SPI1 输出 |
-| USART1 TX | PB6 | AF_PP | 串口发送（重映射） |
-| USART1 RX | PB7 | IPU | 串口接收（重映射） |
+| USART1 TX | PA9 | AF_PP | 串口发送 |
+| USART1 RX | PA10 | IPU | 串口接收 |
 | 光敏传感器 AO | PA0 | AIN | ADC1 CH0 |
 
 > `01-BareMetal-Practice/` 和 `02-Timer-Exercises/` 为不同时期的独立项目，引脚分配各有不同，以各自工程内 `main.c` 和 `my_lib/` 中的实际配置为准。
