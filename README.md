@@ -14,6 +14,8 @@
 | `02-Timer-Exercises/` | 定时器专项（PWM/输入捕获/主从模式） | 标准外设库 + Keil |
 | `Integrated_Project/` | 第一周综合项目 FreeRTOS 重构 | CubeMX + HAL + FreeRTOS |
 
+> `01-BareMetal-Practice/` 和 `02-Timer-Exercises/` 中的 `???` 标记为闭卷默写时的自我纠错注释，记录了从错误到正确的迭代过程。
+>
 > 标准外设库（`std_periph_driver/`、`startup/`）和 CubeMX 生成文件已通过 `.gitignore` 排除。克隆后需自行添加 ST 标准外设库和 HAL 驱动到对应路径。
 
 ---
