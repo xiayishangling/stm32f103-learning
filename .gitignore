@@ -1,4 +1,4 @@
-# 原始学习资料（仅保留提炼后的文档）
+# ========== 原始学习资料（仅保留提炼后的文档）==========
 6.1/
 6.2/
 6.3/
@@ -16,8 +16,6 @@
 6.18/
 6.19/
 qt/
-
-# 根目录原始文件
 *.docx
 背景参考.txt
 时钟树.txt
@@ -30,20 +28,38 @@ qt/
 每日心得-stm32-格式化v2.docx
 前-stm32-心得.md
 
-# Keil 编译产物（标准库工程）
-**/Objects/
-**/Listings/
-**/DebugConfig/
+# ========== Keil 编译产物 ==========
+*.o *.d *.crf *.htm *.dep *.map *.bak *.lnp *.lst *.ini *.iex *.tra
 *.uvguix.*
-*.uvoptx
 *.scvd
-*.lin
-*.VSIX
-**/.vscode/keil-assistant.log
-**/.vscode/uv4.log*
-**/清理.cmd
+JLinkLog.txt
+RTE/
+Listings/
+Objects/
+DebugConfig/
 
-# CubeMX 中间件（不提交 HAL 库和 FreeRTOS 源码，太大）
+# ========== 标准外设库（ST官方，非用户代码）==========
+**/startup/
+**/std_periph_driver/
+**/system_stm32f10x.*
+
+# ========== CubeMX 自动生成（HAL库/中间件）==========
 Integrated_Project/Drivers/
 Integrated_Project/Middlewares/
 Integrated_Project/MDK-ARM/
+Integrated_Project/Core/Src/gpio.c
+Integrated_Project/Core/Src/i2c.c
+Integrated_Project/Core/Src/spi.c
+Integrated_Project/Core/Src/usart.c
+Integrated_Project/Core/Src/stm32f1xx_hal_msp.c
+Integrated_Project/Core/Src/stm32f1xx_hal_timebase_tim.c
+Integrated_Project/Core/Src/stm32f1xx_it.c
+Integrated_Project/Core/Src/system_stm32f1xx.c
+Integrated_Project/Core/Inc/gpio.h
+Integrated_Project/Core/Inc/i2c.h
+Integrated_Project/Core/Inc/spi.h
+Integrated_Project/Core/Inc/usart.h
+Integrated_Project/Core/Inc/stm32f1xx_hal_conf.h
+Integrated_Project/Core/Inc/stm32f1xx_it.h
+Integrated_Project/Core/Inc/main.h
+Integrated_Project/Core/Inc/FreeRTOSConfig.h
