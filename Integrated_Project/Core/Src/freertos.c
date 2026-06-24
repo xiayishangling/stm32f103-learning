@@ -25,7 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "My_Code1.h"
+#include "app_globals.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -96,6 +96,34 @@ const osThreadAttr_t Test_CPU_usage_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for PS_Task */
+osThreadId_t PS_TaskHandle;
+const osThreadAttr_t PS_Task_attributes = {
+  .name = "PS_Task",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for UR_Task */
+osThreadId_t UR_TaskHandle;
+const osThreadAttr_t UR_Task_attributes = {
+  .name = "UR_Task",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for CLI_Task */
+osThreadId_t CLI_TaskHandle;
+const osThreadAttr_t CLI_Task_attributes = {
+  .name = "CLI_Task",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for PC13_Task */
+osThreadId_t PC13_TaskHandle;
+const osThreadAttr_t PC13_Task_attributes = {
+  .name = "PC13_Task",
+  .stack_size = 64 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* Definitions for KEY_Queue */
 osMessageQueueId_t KEY_QueueHandle;
 const osMessageQueueAttr_t KEY_Queue_attributes = {
@@ -116,6 +144,16 @@ osSemaphoreId_t KEY_BinarySemHandle;
 const osSemaphoreAttr_t KEY_BinarySem_attributes = {
   .name = "KEY_BinarySem"
 };
+/* Definitions for PS_BinarySem */
+osSemaphoreId_t PS_BinarySemHandle;
+const osSemaphoreAttr_t PS_BinarySem_attributes = {
+  .name = "PS_BinarySem"
+};
+/* Definitions for UR_BinarySem */
+osSemaphoreId_t UR_BinarySemHandle;
+const osSemaphoreAttr_t UR_BinarySem_attributes = {
+  .name = "UR_BinarySem"
+};
 /* Definitions for USART_CountingSem */
 osSemaphoreId_t USART_CountingSemHandle;
 const osSemaphoreAttr_t USART_CountingSem_attributes = {
@@ -134,6 +172,10 @@ void vIP_OLEDTask(void *argument);
 void vIP_W25Q64Task(void *argument);
 void vIP_PA11Flick(void *argument);
 void T_CPU_U_Task(void *argument);
+void vIP_PS_IJ_Task(void *argument);
+void vIP_UR_Task(void *argument);
+void vIP_CLI_Task(void *argument);
+void vIP_PC13_StartTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -157,6 +199,12 @@ void MX_FREERTOS_Init(void) {
   /* Create the semaphores(s) */
   /* creation of KEY_BinarySem */
   KEY_BinarySemHandle = osSemaphoreNew(1, 0, &KEY_BinarySem_attributes);
+
+  /* creation of PS_BinarySem */
+  PS_BinarySemHandle = osSemaphoreNew(1, 1, &PS_BinarySem_attributes);
+
+  /* creation of UR_BinarySem */
+  UR_BinarySemHandle = osSemaphoreNew(1, 0, &UR_BinarySem_attributes);
 
   /* creation of USART_CountingSem */
   USART_CountingSemHandle = osSemaphoreNew(10, 0, &USART_CountingSem_attributes);
@@ -201,6 +249,18 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of Test_CPU_usage */
   Test_CPU_usageHandle = osThreadNew(T_CPU_U_Task, NULL, &Test_CPU_usage_attributes);
+
+  /* creation of PS_Task */
+  PS_TaskHandle = osThreadNew(vIP_PS_IJ_Task, NULL, &PS_Task_attributes);
+
+  /* creation of UR_Task */
+  UR_TaskHandle = osThreadNew(vIP_UR_Task, NULL, &UR_Task_attributes);
+
+  /* creation of CLI_Task */
+  CLI_TaskHandle = osThreadNew(vIP_CLI_Task, NULL, &CLI_Task_attributes);
+
+  /* creation of PC13_Task */
+  PC13_TaskHandle = osThreadNew(vIP_PC13_StartTask, NULL, &PC13_Task_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -336,6 +396,78 @@ __weak void T_CPU_U_Task(void *argument)
     osDelay(1);
   }
   /* USER CODE END T_CPU_U_Task */
+}
+
+/* USER CODE BEGIN Header_vIP_PS_IJ_Task */
+/**
+* @brief Function implementing the PS_Task thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_vIP_PS_IJ_Task */
+__weak void vIP_PS_IJ_Task(void *argument)
+{
+  /* USER CODE BEGIN vIP_PS_IJ_Task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END vIP_PS_IJ_Task */
+}
+
+/* USER CODE BEGIN Header_vIP_UR_Task */
+/**
+* @brief Function implementing the UR_Task thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_vIP_UR_Task */
+__weak void vIP_UR_Task(void *argument)
+{
+  /* USER CODE BEGIN vIP_UR_Task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END vIP_UR_Task */
+}
+
+/* USER CODE BEGIN Header_vIP_CLI_Task */
+/**
+* @brief Function implementing the CLI_Task thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_vIP_CLI_Task */
+__weak void vIP_CLI_Task(void *argument)
+{
+  /* USER CODE BEGIN vIP_CLI_Task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END vIP_CLI_Task */
+}
+
+/* USER CODE BEGIN Header_vIP_PC13_StartTask */
+/**
+* @brief Function implementing the PC13_Task thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_vIP_PC13_StartTask */
+__weak void vIP_PC13_StartTask(void *argument)
+{
+  /* USER CODE BEGIN vIP_PC13_StartTask */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END vIP_PC13_StartTask */
 }
 
 /* Private application code --------------------------------------------------*/

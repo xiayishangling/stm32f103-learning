@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "adc.h"
 #include "dma.h"
 #include "i2c.h"
 #include "spi.h"
@@ -28,9 +29,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "My_Code1.h"
-#include "My_Code2.h"
-#include "My_Code3.h"
+#include "app_globals.h"   // g_state + 全部公共类型
+#include "dwt.h"           // DWT_Init()
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -83,7 +83,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  DWT_Init();
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -100,8 +100,19 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI1_Init();
   MX_TIM3_Init();
+  MX_ADC1_Init();
+  MX_TIM1_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-
+  //中断优先级重新分配
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 1, 0);  /* TX DMA: 最高 */
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 1, 0);  /* RX DMA: 最高 */
+  HAL_NVIC_SetPriority(TIM2_IRQn,           6, 0);  /* 超声波捕获 */
+  HAL_NVIC_SetPriority(ADC1_2_IRQn,         7, 0);  /* 光敏 JEOC   */
+  HAL_NVIC_SetPriority(USART1_IRQn,         8, 0);  /* 串口       */
+  HAL_NVIC_SetPriority(TIM3_IRQn,           9, 0);  /* CPU 测量   */
+  HAL_NVIC_SetPriority(EXTI1_IRQn,         10, 0);  /* 按键1      */
+  HAL_NVIC_SetPriority(EXTI2_IRQn,         10, 0);  /* 按键2      */
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -118,7 +129,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -132,6 +143,7 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -158,6 +170,12 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
   }

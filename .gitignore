@@ -62,6 +62,7 @@ Integrated_Project/MDK-ARM/
 
 Integrated_Project/Core/Src/dma.c
 Integrated_Project/Core/Src/tim.c
+Integrated_Project/Core/Src/adc.c
 Integrated_Project/Core/Src/gpio.c
 Integrated_Project/Core/Src/i2c.c
 Integrated_Project/Core/Src/spi.c
@@ -74,6 +75,8 @@ Integrated_Project/Core/Inc/gpio.h
 Integrated_Project/Core/Inc/i2c.h
 Integrated_Project/Core/Inc/spi.h
 Integrated_Project/Core/Inc/usart.h
+Integrated_Project/Core/Inc/tim.h
+Integrated_Project/Core/Inc/adc.h
 Integrated_Project/Core/Inc/stm32f1xx_hal_conf.h
 Integrated_Project/Core/Inc/stm32f1xx_it.h
 Integrated_Project/Core/Inc/main.h
