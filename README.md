@@ -1,6 +1,6 @@
 # STM32F103C8T6 嵌入式开发学习记录
 
-> 🎬 [演示视频（B站）](https://www.bilibili.com/video/BV1M2j863EG5/)
+> 🎬 [演示视频（B站）](https://www.bilibili.com/video/BV1RFjo64Ew1/)
 
 > **环境**：VSCode + Keil + Keil Assistant → CubeMX + FreeRTOS  
 > **库文件**：B站 [铁头山羊](https://space.bilibili.com/471714251) 标准外设库 / HAL 库  
@@ -181,4 +181,5 @@ Integrated_Project/
 - [x] FreeRTOS（任务、队列、信号量、互斥锁）
 - [x] DWT（微秒级延时）
 - [x] CLI（命令行交互控制）
+
 
