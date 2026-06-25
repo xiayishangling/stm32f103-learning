@@ -13,7 +13,7 @@
 - **大二**：通过学校作业（循迹小车、阿里云智慧家居）接触嵌入式开发，熟悉了传感器驱动、蓝牙通信、云平台对接等基本概念
 - **2025 下半年**：系统学习 STM32，参与机器狗实训，自学 C 语言和标准外设库
 - **2026 上半年**：持续深入外设驱动、中断系统、RTOS 等，积累底层驱动代码
-- **2026.06**：开始用 Git 统一管理，将之前的代码和项目重新闭卷手写整理，逐日提交至本仓库
+- **2026.06**：开始用 Git 统一管理，将之前的代码和项目独立重新实现，逐日提交至本仓库
 
 
 ---
@@ -26,7 +26,18 @@
 | `02-Timer-Exercises/` | 定时器专项（PWM/输入捕获/主从模式） | 标准外设库 + Keil |
 | `Integrated_Project/` | 综合项目 FreeRTOS 重构 | CubeMX + HAL + FreeRTOS |
 
-> `01-BareMetal-Practice/` 和 `02-Timer-Exercises/` 中的 `???` 标记为闭卷默写时的自我纠错注释，记录了从错误到正确的迭代过程。
+---
+
+## 🚀 快速开始
+
+1. `git clone` 本仓库，补充 ST 标准外设库和 HAL 驱动到 `Drivers/` 路径
+2. 使用 Keil MDK 打开对应项目下的 `.uvprojx`，编译烧录到 STM32F103C8T6 最小系统板
+3. 串口连接 PA9/PA10，115200 波特率，输入 `help` 查看 CLI 命令
+
+> `Integrated_Project.ioc` 为 CubeMX 工程文件，可双击打开查看时钟树（HSE 8MHz → PLL 72MHz）、外设引脚配置、FreeRTOS 参数等。CubeMX 生成代码已通过 `.gitignore` 排除。
+
+
+> `01-BareMetal-Practice/` 和 `02-Timer-Exercises/` 中的 `???` 标记为独立实现时的自我纠错注释，记录了从错误到正确的迭代过程。
 >
 > 标准外设库（`std_periph_driver/`、`startup/`）和 CubeMX 生成文件已通过 `.gitignore` 排除。克隆后需自行添加 ST 标准外设库和 HAL 驱动到对应路径。
 
@@ -145,59 +156,6 @@ Integrated_Project/
 | 超声波 Trig | PB14 | 推挽输出 | 触发脉冲 |
 | 超声波 Echo | PA15 | IPU | TIM2 CH1 输入捕获（重映射） |
 
-> `01-BareMetal-Practice/` 和 `02-Timer-Exercises/` 为不同时期的独立项目，引脚分配各有不同，以各自工程内 `main.c` 和 `my_lib/` 中的实际配置为准。
-
 ---
-
-## 📖 技术文档
-
-| 日期 | 主题 | 文档 |
-|------|------|------|
-| 6.01 | GPIO 按键控制 LED | [docs/6.01-按键控制LED.md](docs/6.01-按键控制LED.md) |
-| 6.02 | USART 串口通信 | [docs/6.02-USART串口通信.md](docs/6.02-USART串口通信.md) |
-| 6.03 | I2C 通信 | [docs/6.03-I2C通信.md](docs/6.03-I2C通信.md) |
-| 6.04 | SPI + W25Q64 Flash | [docs/6.04-SPI通信Flash.md](docs/6.04-SPI通信Flash.md) |
-| 6.05 | NVIC + EXTI 中断 | [docs/6.05-中断系统NVIC+EXTI.md](docs/6.05-中断系统NVIC+EXTI.md) |
-| 6.06 | 时钟树 + 第一周综合项目 | [docs/6.06-时钟树+综合项目.md](docs/6.06-时钟树+综合项目.md) |
-| 6.07 | 定时器 + PWM 呼吸灯 | [docs/6.07-定时器PWM呼吸灯.md](docs/6.07-定时器PWM呼吸灯.md) |
-| 6.09 | 输入捕获 + 超声波测距 | [docs/6.09-输入捕获超声波测距.md](docs/6.09-输入捕获超声波测距.md) |
-| 6.10 | 主从模式 + PWM 测量 | [docs/6.10-主从模式PWM测量.md](docs/6.10-主从模式PWM测量.md) |
-| 6.11 | ADC 光敏传感器 + 回调函数 | [docs/6.11-ADC光敏传感器.md](docs/6.11-ADC光敏传感器.md) |
-| 6.14 | ADC 注入序列 + 扫描模式 | [docs/6.14-ADC注入序列+扫描模式.md](docs/6.14-ADC注入序列+扫描模式.md) |
-| 6.15 | FreeRTOS 入门 | [docs/6.15-FreeRTOS入门.md](docs/6.15-FreeRTOS入门.md) |
-| 6.16 | FreeRTOS 队列实战 | [docs/6.16-FreeRTOS队列实战.md](docs/6.16-FreeRTOS队列实战.md) |
-| 6.17 | 二进制信号量 | [docs/6.17-二进制信号量.md](docs/6.17-二进制信号量.md) |
-| 6.18 | 综合项目 RTOS 重构 | [docs/6.18-综合项目RTOS重构.md](docs/6.18-综合项目RTOS重构.md) |
-| 6.19 | 按键消抖模块化封装 | [docs/6.19-按键消抖模块化.md](docs/6.19-按键消抖模块化.md) |
-| 6.22 | 模块化头文件 & DMA 调试 | [docs/6.22-模块化头文件与DMA调试.md](docs/6.22-模块化头文件与DMA调试.md) |
-
----
-
-## 📚 参考资料
-
-- [外设中英文对照表](心得分享/外设中英文对照表.md) — 13 大类，180+ 术语
-
----
-
-## 🛠 外设覆盖
-
-- [x] GPIO（推挽/开漏/上拉/下拉）
-- [x] USART（重映射、中断接收、DMA 收发、CLI 命令）
-- [x] I2C（主机收发、ACK/NAK、时钟拉伸）
-- [x] SPI（全双工、W25Q64 Flash、阈值持久化）
-- [x] NVIC + EXTI（优先级分组、外部中断）
-- [x] TIM（时基/PWM/输入捕获/主从模式）
-- [x] ADC（常规/注入/扫描/定时器触发）
-- [x] OLED（I2C 驱动、多页面切换）
-- [x] FreeRTOS（任务、队列、信号量、互斥锁）
-- [x] DWT（微秒级延时）
-- [x] CLI（命令行交互控制）
-
-
-
-
-
-
-
 
 
