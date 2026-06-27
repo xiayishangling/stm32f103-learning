@@ -47,7 +47,7 @@ struct Sensor {
 新增：
 - `OLED_Display_QueueHandle`：OLED 页面刷新队列，解耦显示请求
 - `Sensor_Notify_QueueHandle`：传感器更新通知队列，替代轮询
-- `SensorEvent` 枚举：`SENSOR_PS_UPDATAED` / `SENSOR_UR_UPDATAED`
+- `SensorEvent` 枚举：`SENSOR_PS_UPDATED` / `SENSOR_UR_UPDATED`
 
 从轮询到通知，CPU 不再空转检查传感器状态。
 
