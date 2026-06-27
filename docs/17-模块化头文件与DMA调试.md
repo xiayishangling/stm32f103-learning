@@ -1,69 +1,78 @@
-# 6.22 蹇冨緱 鈥斺€?妯″潡鍖栧ご鏂囦欢 & My_Code3
+# 6.22 心得 —— 模块化头文件 & My_Code3
 
-> 鎸佺画鏇存柊 | 鏈€鍚庢洿鏂帮細2026-06-22
+> 持续更新 | 最后更新：2026-06-22
 
 ---
 
-## 涓€銆佸ご鏂囦欢妯″潡鍖栧紑鍏虫ā寮?
-My_Code3.h 灞曠ず浜嗘渶瀹屾暣鐨勬潯浠剁紪璇戞ā寮忥細
+## 一、头文件模块化开关模式
+
+My_Code3.h 展示了最完整的条件编译模式：
 
 ```c
 #ifdef MODULE_ENABLED
-    // 鐪熷疄鍑芥暟澹版槑銆佸彉閲忓０鏄?    void Func(void);
+    // 真实函数声明、变量声明
+    void Func(void);
     extern uint8_t buffer[64];
 #else
-    // 绌哄畯锛岃皟鐢ㄨ鏇挎崲涓虹┖
+    // 空宏，调用被替换为空
     #define Func()
 #endif
 ```
 
-**鏍稿績鎬濇兂**锛氶€氳繃 `app_config.h` 涓殑瀹忓紑鍏筹紝涓€琛屾敞閲婂氨鑳藉惎鐢?绂佺敤涓€涓ā鍧楋紝鏃犻渶鏀瑰姩涓氬姟浠ｇ爜銆?
-### 鍚勬ā鍧楀姣?
-| 鏂囦欢 | 鍚敤寮€鍏?| 妯″紡 |
-|------|----------|------|
-| My_Code1.h | `SIX_MODULE_LINGKAGE_FREERTOS_ENABLED` | 鍗曞眰 `#ifdef`锛堟棤 `#else` 绌哄畯锛?|
-| My_Code2.h | `KEY_DEBOUNCE_MODULE_ENABLED` | 鍗曞眰 `#ifdef` |
-| My_Code3.h | `HAL_UART_MODULE_ENABLED` / `TEST_CPU_USAGE_ENABLED` | **鍙屽眰鏉′欢缂栬瘧** + `#else` 绌哄畯 |
+**核心思想**：通过 `app_config.h` 中的宏开关，一行注释就能启用/禁用一个模块，无需改动业务代码。
 
-### 澶存枃浠跺叕鍏变緷璧栭摼
+### 各模块对比
+
+| 文件 | 启用开关 | 模式 |
+|------|----------|------|
+| My_Code1.h | `SIX_MODULE_LINGKAGE_FREERTOS_ENABLED` | 单层 `#ifdef`（无 `#else` 空宏） |
+| My_Code2.h | `KEY_DEBOUNCE_MODULE_ENABLED` | 单层 `#ifdef` |
+| My_Code3.h | `HAL_UART_MODULE_ENABLED` / `TEST_CPU_USAGE_ENABLED` | **双层条件编译** + `#else` 空宏 |
+
+### 头文件公共依赖链
 
 ```
 My_CodeX.h
-  鈹斺攢鈹€ app_common.h        (鍏叡缁撴瀯浣撱€佹灇涓俱€佸閮ㄥ０鏄?
-        鈹溾攢鈹€ stm32f1xx_hal.h
-        鈹溾攢鈹€ cmsis_os.h
-        鈹溾攢鈹€ main.h
-        鈹溾攢鈹€ <stdbool.h>
-        鈹溾攢鈹€ <string.h>
-        鈹溾攢鈹€ <stdio.h>
-        鈹溾攢鈹€ <stdlib.h>
-        鈹溾攢鈹€ <math.h>
-        鈹斺攢鈹€ app_config.h   (妯″潡寮€鍏?
+  └── app_common.h        (公共结构体、枚举、外部声明)
+        ├── stm32f1xx_hal.h
+        ├── cmsis_os.h
+        ├── main.h
+        ├── <stdbool.h>
+        ├── <string.h>
+        ├── <stdio.h>
+        ├── <stdlib.h>
+        ├── <math.h>
+        └── app_config.h   (模块开关)
 ```
 
-鎵€鏈?My_CodeX.h 鍙渶 `#include "app_common.h"`锛屾棤闇€閲嶅寮曞叆 STM32 澶存枃浠躲€?
+所有 My_CodeX.h 只需 `#include "app_common.h"`，无需重复引入 STM32 头文件。
+
 ---
 
-## 浜屻€丮y_Code3 鏍稿績鍐呭
+## 二、My_Code3 核心内容
 
-### 2.1 UART DMA 鏀跺彂
+### 2.1 UART DMA 收发
 
 ```c
-// 澶存枃浠跺畯瀹氫箟
-#define ADD_DMA_USART       huart1          // 缁戝畾鍏蜂綋澶栬瀹炰緥
+// 头文件宏定义
+#define ADD_DMA_USART       huart1          // 绑定具体外设实例
 #define TX_DMA_BUFFER_SIZE  64
 #define RX_DMA_BURRER_SIZE  64
 
-// DMA 鎵撳嵃瀹忥紙闈為樆濉?printf锛?#define UART_DMA_Printf(...) do { \
+// DMA 打印宏（非阻塞 printf）
+#define UART_DMA_Printf(...) do { \
     int len = sprintf((char *)tx_dma_buffer, __VA_ARGS__); \
     HAL_UART_Transmit_DMA(&ADD_DMA_USART, tx_dma_buffer, len); \
 } while(0)
 ```
 
-**鍏抽敭鐐?*锛?- `HAL_UARTEx_ReceiveToIdle_DMA` 瀹炵幇涓嶅畾闀挎帴鏀讹紙绌洪棽涓柇瑙﹀彂鍥炶皟锛?- `UART_DMA_Printf` 鐢?DMA 浼犺緭浠ｆ浛闃诲鎵撳嵃锛屼笉鍗?FreeRTOS 璋冨害
-- 浣跨敤 `do { ... } while(0)` 鍖呰９瀹忥紝纭繚鍦ㄤ换浣?`if/else` 涓婁笅鏂囦腑瀹夊叏灞曞紑
+**关键点**：
+- `HAL_UARTEx_ReceiveToIdle_DMA` 实现不定长接收（空闲中断触发回调）
+- `UART_DMA_Printf` 用 DMA 传输代替阻塞打印，不卡 FreeRTOS 调度
+- 使用 `do { ... } while(0)` 包裹宏，确保在任何 `if/else` 上下文中安全展开
 
-### 2.2 CPU 浣跨敤鐜囩洃鎺т换鍔?
+### 2.2 CPU 使用率监控任务
+
 ```c
 void T_CPU_U_Task(void *argument)
 {
@@ -74,55 +83,64 @@ void T_CPU_U_Task(void *argument)
         {
             uint32_t start = __HAL_TIM_GetCounter(&htim3);
             tim3_finish_flag = 0;
-            // ... 涓氬姟澶勭悊 ...
+            // ... 业务处理 ...
             cpu_use = (float)((__HAL_TIM_GetCounter(&htim3) - start) / 5000.f) * 100;
         }
     }
 }
 ```
 
-**鍘熺悊**锛歍IM3 瀹氭椂涓柇 鈫?缃爣蹇椾綅 鈫?浠诲姟娴嬮噺绌洪棽璁℃暟宸€?鈫?鍙嶇畻 CPU 鍗犵敤鐜囥€?
+**原理**：TIM3 定时中断 → 置标志位 → 任务测量空闲计数差值 → 反算 CPU 占用率。
+
 ---
 
-## 涓夈€佸瘎瀛樺櫒浣嶆搷浣滃畯
+## 三、寄存器位操作宏
 
 ```c
 #ifndef SET_BIT
-#define SET_BIT(REG, BIT)    ((REG) |= (BIT))     // 鍐?|=   (缃?)
+#define SET_BIT(REG, BIT)    ((REG) |= (BIT))     // 写 |=   (置1)
 #endif
 
 #ifndef CLEAR_BIT
-#define CLEAR_BIT(REG, BIT)  ((REG) &= (~BIT))    // 娓呴櫎 &=~ (娓?)
+#define CLEAR_BIT(REG, BIT)  ((REG) &= (~BIT))    // 清除 &=~ (清0)
 #endif
 
 #ifndef READ_BIT
-#define READ_BIT(REG, BIT)   ((REG) & (BIT))      // 璇诲彇 &   (鍒ゆ柇)
+#define READ_BIT(REG, BIT)   ((REG) & (BIT))      // 读取 &   (判断)
 #endif
 
-// 绀轰緥锛氱偣浜?PC13 鐨?LED
+// 示例：点亮 PC13 的 LED
 SET_BIT(GPIOC->ODR, GPIO_PIN_13);
-// 绛変环浜?GPIOC->ODR |= 0x2000; (绗?3浣嶅彉1锛屽叾浣欎笉鍙?
+// 等价于 GPIOC->ODR |= 0x2000; (第13位变1，其余不变)
 ```
 
 ---
 
-## 鍥涖€丗reeRTOS 鍫嗗唴瀛樺竷灞€
+## 四、FreeRTOS 堆内存布局
 
-`configTOTAL_HEAP_SIZE = 10240` 涓嶄細鍜岀郴缁?Heap/Stack 鍐茬獊锛?
+`configTOTAL_HEAP_SIZE = 10240` 不会和系统 Heap/Stack 冲突：
+
 ```
-SRAM 甯冨眬锛堢ず鎰忥級锛?鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹? 绯荤粺 Stack (0x400)  鈹? 鈫?鐢卞惎鍔ㄦ枃浠跺垎閰?鈹溾攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹? 绯荤粺 Heap  (0x200)  鈹? 鈫?malloc 浠庤繖閲屾嬁
-鈹溾攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹? FreeRTOS ucHeap[]   鈹? 鈫?heap_4.c 涓?static uint8_t ucHeap[10240]
-鈹? (10KB)                鈹?   鐙珛浜庣郴缁熷爢鏍堬紝浜掍笉骞叉壈
-鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?```
+SRAM 布局（示意）：
+┌──────────────────────┐
+│  系统 Stack (0x400)  │  ← 由启动文件分配
+├──────────────────────┤
+│  系统 Heap  (0x200)  │  ← malloc 从这里拿
+├──────────────────────┤
+│  FreeRTOS ucHeap[]   │  ← heap_4.c 中 static uint8_t ucHeap[10240]
+│  (10KB)                │    独立于系统堆栈，互不干扰
+└──────────────────────┘
+```
 
-FreeRTOS heap_4 鐢?`static uint8_t ucHeap[]` 鐙珛鍒掍簡涓€鍧?`.bss` 娈碉紝鏃笉鍗犵敤绯荤粺 Heap 涔熶笉鍗犵敤绯荤粺 Stack銆?
+FreeRTOS heap_4 用 `static uint8_t ucHeap[]` 独立划了一块 `.bss` 段，既不占用系统 Heap 也不占用系统 Stack。
+
 ---
 
-## 浜斻€佷粖鏃ュ彂鐜扮殑闂
+## 五、今日发现的问题
 
-| 闂 | 浣嶇疆 | 璇存槑 |
+| 问题 | 位置 | 说明 |
 |------|------|------|
-| `RX_DMA_BURRER_SIZE` | My_Code3.h/c | 鎷煎啓閿欒锛屽簲涓?`BUFFER` |
-| `TEST_CPU_USAGE_ENABLE` | app_config.h | 灏戜簡涓?`D`锛屽簲涓?`ENABLED` |
+| `RX_DMA_BURRER_SIZE` | My_Code3.h/c | 拼写错误，应为 `BUFFER` |
+| `TEST_CPU_USAGE_ENABLE` | app_config.h | 少了个 `D`，应为 `ENABLED` |
 
-杩欎簺鎷煎啓涓嶄竴鑷磋櫧鐒朵笉褰卞搷缂栬瘧锛堝洜涓哄紩鐢ㄥ淇濇寔涓€鑷达級锛屼絾寤鸿缁熶竴淇銆?
+这些拼写不一致虽然不影响编译（因为引用处保持一致），但建议统一修正。

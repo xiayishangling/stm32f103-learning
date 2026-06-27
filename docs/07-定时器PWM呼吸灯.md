@@ -1,48 +1,54 @@
-# 6.7 瀹氭椂鍣?鈥?鏃跺熀鍗曞厓 + PWM 鍛煎惛鐏?
-> **鑺墖**锛歋TM32F103C8T6 | **鐜**锛歏SCode + Keil + Keil Assistant  
-> **涓婚**锛氭椂鍩哄崟鍏冦€侀潪闃诲寤舵椂銆佷簰琛?PWM 杈撳嚭銆佹寮﹀懠鍚哥伅
+# 6.7 定时器 — 时基单元 + PWM 呼吸灯
+
+> **芯片**：STM32F103C8T6 | **环境**：VSCode + Keil + Keil Assistant  
+> **主题**：时基单元、非阻塞延时、互补 PWM 输出、正弦呼吸灯
 
 ---
 
-## 涓€銆佹牳蹇冧唬鐮?
-### 1. TIM2 涓柇椹卞姩姣璁℃暟鍣紙鏇夸唬 GetTick锛?
+## 一、核心代码
+
+### 1. TIM2 中断驱动毫秒计数器（替代 GetTick）
+
 ```c
-volatile uint32_t currentTick = 0;  // volatile锛氫腑鏂拰涓诲惊鐜兘璁块棶
+volatile uint32_t currentTick = 0;  // volatile：中断和主循环都访问
 
 void Init_TIM2(void)
 {
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
 
     TIM_TimeBaseInitTypeDef tim = {0};
-    tim.TIM_Prescaler         = 71;              // 72M / (71+1) = 1MHz = 1渭s
-    tim.TIM_Period            = 999;             // 1渭s 脳 1000 = 1ms
+    tim.TIM_Prescaler         = 71;              // 72M / (71+1) = 1MHz = 1μs
+    tim.TIM_Period            = 999;             // 1μs × 1000 = 1ms
     tim.TIM_CounterMode       = TIM_CounterMode_Up;
     tim.TIM_RepetitionCounter = 0;
     TIM_TimeBaseInit(TIM2, &tim);
 
-    TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);   // 浣胯兘鏇存柊涓柇
+    TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);   // 使能更新中断
     NVIC_Init(/* TIM2_IRQn */);
     TIM_Cmd(TIM2, ENABLE);
 }
 
-// ISR锛氭瘡 1ms 瑙﹀彂涓€娆?void TIM2_IRQHandler(void)
+// ISR：每 1ms 触发一次
+void TIM2_IRQHandler(void)
 {
     if (TIM_GetFlagStatus(TIM2, TIM_IT_Update) == SET) {
         TIM_ClearFlag(TIM2, TIM_IT_Update);
-        currentTick++;  // 鍏堟竻鏍囧織锛屽啀鎿嶄綔
+        currentTick++;  // 先清标志，再操作
     }
 }
 ```
 
-### 2. 闈為樆濉炲欢鏃讹紙鍙栦唬 Delay锛?
+### 2. 非阻塞延时（取代 Delay）
+
 ```c
 void My_Delay_1(uint32_t ms)
 {
     uint32_t expire = currentTick + ms;
-    while (currentTick < expire);  // 蹇欑瓑浣嗕笉闃诲涓柇
+    while (currentTick < expire);  // 忙等但不阻塞中断
 }
 
-// 浣跨敤鐘舵€佹満瀹炵幇 1s 闂儊锛堝畬鍏ㄤ笉鍗?CPU锛?void Process_mydelay(void)
+// 使用状态机实现 1s 闪烁（完全不占 CPU）
+void Process_mydelay(void)
 {
     static uint32_t last = 0;
     static uint8_t  flag = 0;
@@ -59,13 +65,14 @@ void My_Delay_1(uint32_t ms)
 }
 ```
 
-### 3. TIM1 浜掕ˉ PWM + 姝ｅ鸡鍛煎惛鐏?
+### 3. TIM1 互补 PWM + 正弦呼吸灯
+
 ```c
 void init_CCR1_Compare(void)
 {
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM1, ENABLE);
 
-    // 鏃跺熀锛?ms 鍛ㄦ湡
+    // 时基：1ms 周期
     TIM_TimeBaseInitTypeDef tim = {0};
     tim.TIM_Prescaler = 71;   // 1MHz
     tim.TIM_Period    = 999;  // 1ms
@@ -73,18 +80,20 @@ void init_CCR1_Compare(void)
     TIM_TimeBaseInit(TIM1, &tim);
 
     TIM_Cmd(TIM1, ENABLE);
-    TIM_CtrlPWMOutputs(TIM1, ENABLE);  // MOE 鈥?楂樼骇瀹氭椂鍣ㄥ繀椤诲紑锛?
-    // 杈撳嚭姣旇緝锛欳H1(PA8) + CH1N(PB13) 浜掕ˉ
+    TIM_CtrlPWMOutputs(TIM1, ENABLE);  // MOE — 高级定时器必须开！
+
+    // 输出比较：CH1(PA8) + CH1N(PB13) 互补
     TIM_OCInitTypeDef oc = {0};
     oc.TIM_OCMode      = TIM_OCMode_PWM1;
     oc.TIM_OCPolarity  = TIM_OCPolarity_High;
-    oc.TIM_OCNPolarity = TIM_OCPolarity_High;     // 浜掕ˉ鏋佹€т笌 CH1 鐩稿悓 鈫?浜ゆ浛浜?    oc.TIM_OutputState  = TIM_OutputState_Enable;
+    oc.TIM_OCNPolarity = TIM_OCPolarity_High;     // 互补极性与 CH1 相同 → 交替亮
+    oc.TIM_OutputState  = TIM_OutputState_Enable;
     oc.TIM_OutputNState = TIM_OutputNState_Enable;
-    oc.TIM_Pulse        = 0;                      // 鍒濆鍗犵┖姣?0
+    oc.TIM_Pulse        = 0;                      // 初始占空比 0
     TIM_OC1Init(TIM1, &oc);
 }
 
-// 涓诲惊鐜細姝ｅ鸡鍔ㄦ€佸崰绌烘瘮
+// 主循环：正弦动态占空比
 void Process_Breathing_lamp(void)
 {
     init_CCR1_Compare();
@@ -92,85 +101,95 @@ void Process_Breathing_lamp(void)
 
     while (1)
     {
-        float t    = currentTick * 1.0e-3f;               // ms 鈫?s
-        float duty = 0.5f * (sinf(2.0f * 3.1416f * t) + 1); // 0~1 姝ｅ鸡
-        uint16_t ccr = (uint16_t)(duty * 1000.0f);        // CCR = 鍗犵┖姣?脳 鍛ㄦ湡
-        TIM_SetCompare1(TIM1, ccr);                       // 鍔ㄦ€佹洿鏂?CCR
+        float t    = currentTick * 1.0e-3f;               // ms → s
+        float duty = 0.5f * (sinf(2.0f * 3.1416f * t) + 1); // 0~1 正弦
+        uint16_t ccr = (uint16_t)(duty * 1000.0f);        // CCR = 占空比 × 周期
+        TIM_SetCompare1(TIM1, ccr);                       // 动态更新 CCR
     }
 }
 ```
 
 ---
 
-## 浜屻€佹牳蹇冪煡璇嗙偣
+## 二、核心知识点
 
-### 1. 鏃跺熀鍗曞厓鍥涜绱?
-| 瀵勫瓨鍣?| 浣滅敤 | 鍏紡 |
+### 1. 时基单元四要素
+
+| 寄存器 | 作用 | 公式 |
 |--------|------|------|
-| **PSC** | 棰勫垎棰戯紝闄嶄綆杈撳叆鏃堕挓 | `f_tim = f_in / (PSC+1)` |
-| **ARR** | 鑷姩閲嶈锛屽喅瀹氬懆鏈?| `鍛ㄦ湡 = ARR + 1` |
-| **CNT** | 璁℃暟鍣紝瀵瑰垎棰戝悗鑴夊啿璁℃暟 | 鍒?ARR 鍚庡綊闆?|
-| **RCR** | 閲嶅璁℃暟鍣?| `N 娆℃孩鍑?= RCR + 1` |
+| **PSC** | 预分频，降低输入时钟 | `f_tim = f_in / (PSC+1)` |
+| **ARR** | 自动重装，决定周期 | `周期 = ARR + 1` |
+| **CNT** | 计数器，对分频后脉冲计数 | 到 ARR 后归零 |
+| **RCR** | 重复计数器 | `N 次溢出 = RCR + 1` |
 
-> 渚嬶細72MHz 鈫?PSC=71 鈫?1MHz 鈫?ARR=999 鈫?1ms 涓柇
+> 例：72MHz → PSC=71 → 1MHz → ARR=999 → 1ms 中断
 
-### 2. 褰卞瓙瀵勫瓨鍣紙棰勮杞斤級
+### 2. 影子寄存器（预装载）
 
-PSC/ARR/RCR 閮芥湁褰卞瓙瀵勫瓨鍣ㄣ€傚啓鍏ュ悗绛夊埌**鏇存柊浜嬩欢**鎵嶇敓鏁堬紝闃叉 PWM 杩愯涓敼鍙傛暟浜х敓姣涘埡銆侫RR 棰勮杞介渶鎵嬪姩寮€鍚?`ARPE`銆?
-### 3. PWM 鍗犵┖姣斿叕寮?
+PSC/ARR/RCR 都有影子寄存器。写入后等到**更新事件**才生效，防止 PWM 运行中改参数产生毛刺。ARR 预装载需手动开启 `ARPE`。
+
+### 3. PWM 占空比公式
+
 ```
-CCR = 鍗犵┖姣?0~1) 脳 (ARR + 1)
+CCR = 占空比(0~1) × (ARR + 1)
 ```
 
-PWM 妯″紡 1锛欳NT < CCR 鈫?鏈夋晥鐢靛钩锛汣NT 鈮?CCR 鈫?鏃犳晥鐢靛钩
+PWM 模式 1：CNT < CCR → 有效电平；CNT ≥ CCR → 无效电平
 
-### 4. 楂樼骇瀹氭椂鍣?MOE
+### 4. 高级定时器 MOE
 
 ```c
-TIM_CtrlPWMOutputs(TIM1, ENABLE);  // 蹇呴』璋冪敤锛屽惁鍒欏紩鑴氭棤娉㈠舰
+TIM_CtrlPWMOutputs(TIM1, ENABLE);  // 必须调用，否则引脚无波形
 ```
 
-TIM1/TIM8 鏄珮绾у畾鏃跺櫒锛屾湁鍒硅溅/姝诲尯鍔熻兘锛孧OE锛堜富杈撳嚭浣胯兘锛夋槸鎬诲紑鍏炽€?
-### 5. 浜掕ˉ杈撳嚭
+TIM1/TIM8 是高级定时器，有刹车/死区功能，MOE（主输出使能）是总开关。
 
-- CHx 鍜?CHxN 鐢靛钩鐩稿弽锛堢粡杩囧弽鐩稿櫒鐨勮瘽锛?- 鑻ユ瀬鎬ц鐩稿悓锛坄High` + `High`锛夛紝鍒?CHxN 鑷姩鍙嶇浉
-- 姝诲尯鏃堕棿鐢?`TIM_BDTRInitTypeDef` 閰嶇疆
+### 5. 互补输出
 
-### 6. Cortex-M3 娴偣浼樺寲
+- CHx 和 CHxN 电平相反（经过反相器的话）
+- 若极性设相同（`High` + `High`），则 CHxN 自动反相
+- 死区时间由 `TIM_BDTRInitTypeDef` 配置
+
+### 6. Cortex-M3 浮点优化
 
 ```c
-// 鉂?鍙岀簿搴︼紙Cortex-M3 鏃犵‖浠?FPU锛屾瀬鎱級
+// ❌ 双精度（Cortex-M3 无硬件 FPU，极慢）
 float duty = 0.5 * (sin(2.0 * 3.1415926 * t) + 1);
 
-// 鉁?鍗曠簿搴?float duty = 0.5f * (sinf(2.0f * 3.1416f * t) + 1);
+// ✅ 单精度
+float duty = 0.5f * (sinf(2.0f * 3.1416f * t) + 1);
 ```
 
-`f` 鍚庣紑 + `sinf` 閬垮厤鍙岀簿搴﹁蒋娴偣寮€閿€銆?
-### 7. Goto 浣跨敤杈圭晫
+`f` 后缀 + `sinf` 避免双精度软浮点开销。
 
-| 鉁?鍙敤 | 鉂?绂佹 |
+### 7. Goto 使用边界
+
+| ✅ 可用 | ❌ 禁止 |
 |---------|---------|
-| 鍚戝悗璺冲埌缁熶竴娓呯悊/閿欒澶勭悊 | 鍚戝墠璺宠浆 |
-| 璺冲嚭澶氶噸寰幆 | 浜ゅ弶閫昏緫 |
-| Linux 鍐呮牳甯歌妯″紡 | 浣滀负甯歌鎺у埗娴?|
+| 向后跳到统一清理/错误处理 | 向前跳转 |
+| 跳出多重循环 | 交叉逻辑 |
+| Linux 内核常见模式 | 作为常规控制流 |
 
-### 8. 绯荤粺閿欒澶勭悊鐘舵€佹満
+### 8. 系统错误处理状态机
 
 ```c
-// 閿欒鐮?鈫?鏍囧織浣?鈫?涓诲惊鐜檷绾у鐞?if (system_err_flag) {
+// 错误码 → 标志位 → 主循环降级处理
+if (system_err_flag) {
     switch (System_State) {
-        case SYSTEM_HSE_TIMEOUT:  /* 澶勭悊 */ break;
-        case SYSTEM_PLL_TIMEOUT:  /* 澶勭悊 */ break;
-        case SYSTEM_SELECT_ERR:   /* 鍒囧洖 HSI */ break;
+        case SYSTEM_HSE_TIMEOUT:  /* 处理 */ break;
+        case SYSTEM_PLL_TIMEOUT:  /* 处理 */ break;
+        case SYSTEM_SELECT_ERR:   /* 切回 HSI */ break;
     }
 }
 ```
 
-> 閬垮厤 `while(1)` 姝荤瓑锛岃绯荤粺鏈夎嚜鎰堣兘鍔?
+> 避免 `while(1)` 死等，让系统有自愈能力
+
 ---
 
-## 涓夈€佸績寰?
-- 瀹氭椂鍣ㄤ腑鏂┍鍔ㄧ殑 `currentTick` 鏄８鏈烘椂闂寸郴缁熺殑鏍囬厤鈥斺€旀瘮 `GetTick` 鏇村簳灞傘€佹洿鍙帶
-- PWM 鍛煎惛鐏槸鎰熷畼涓婃渶"鐪嬪緱瑙?鐨勬垚灏憋細鍏紡 鈫?瀵勫瓨鍣?鈫?娉㈠舰 鈫?鐏厜锛岄棴鐜劅鏋佸己
-- `TIM_CtrlPWMOutputs` 鏄珮绾у畾鏃跺櫒鐨?闅愯棌寮€鍏?锛屽繕寮€鏄粡鍏稿潙
-- 娴偣鏁?`f` 鍚庣紑鍦?Cortex-M3 涓婁笉鏄亸濂芥槸蹇呴渶
+## 三、心得
+
+- 定时器中断驱动的 `currentTick` 是裸机时间系统的标配——比 `GetTick` 更底层、更可控
+- PWM 呼吸灯是感官上最"看得见"的成就：公式 → 寄存器 → 波形 → 灯光，闭环感极强
+- `TIM_CtrlPWMOutputs` 是高级定时器的"隐藏开关"，忘开是经典坑
+- 浮点数 `f` 后缀在 Cortex-M3 上不是偏好是必需

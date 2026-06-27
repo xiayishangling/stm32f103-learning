@@ -1,42 +1,49 @@
-# 6.15 FreeRTOS 鍏ラ棬 鈥?棣栦釜澶氫换鍔?+ 鏋舵瀯鍏ㄦ櫙
+# 6.15 FreeRTOS 入门 — 首个多任务 + 架构全景
 
-> **鑺墖**锛歋TM32F103C8T6 | **鐜**锛欳ubeMX + VSCode + Keil  
-> **涓婚**锛欶reeRTOS 宸ョ▼鎼缓銆佷笁浠诲姟璋冨害銆佸唴鏍告灦鏋勩€丆 璇█鍐呭瓨/浣滅敤鍩熷己鍖?
+> **芯片**：STM32F103C8T6 | **环境**：CubeMX + VSCode + Keil  
+> **主题**：FreeRTOS 工程搭建、三任务调度、内核架构、C 语言内存/作用域强化
+
 ---
 
-## 涓€銆佹牳蹇冧唬鐮?
-### 1. C 璇█寮哄寲锛氶潤鎬佸眬閮ㄥ彉閲?+ 鍔ㄦ€佸唴瀛?
+## 一、核心代码
+
+### 1. C 语言强化：静态局部变量 + 动态内存
+
 ```c
-// 闈欐€佸眬閮ㄥ彉閲忥細鍑芥暟閫€鍑轰笉閿€姣侊紝鍊间繚鐣?static int static_globalvar = 100;  // 闈欐€佸叏灞€鍙橀噺 鈥?浠呮湰鏂囦欢鍙
+// 静态局部变量：函数退出不销毁，值保留
+static int static_globalvar = 100;  // 静态全局变量 — 仅本文件可见
 
 int getnextsquare()
 {
-    static int num = 1;     // 闈欐€佸眬閮細鐢熷懡鍛ㄦ湡 = 鏁翠釜绋嬪簭
+    static int num = 1;     // 静态局部：生命周期 = 整个程序
     int ret = num * num;
     num++;
     return ret;
 }
 
-// 涓诲嚱鏁帮細鍔ㄦ€佸垎閰?n 涓钩鏂规暟
+// 主函数：动态分配 n 个平方数
 int main(int argc, char *argv[])
 {
     int n;
     scanf_s("%d", &n);
-    int *pbuff = (int *)malloc(sizeof(int) * n);  // 鍫嗗彉閲?    for (int i = 0; i < n; i++)
+    int *pbuff = (int *)malloc(sizeof(int) * n);  // 堆变量
+    for (int i = 0; i < n; i++)
         pbuff[i] = getnextsquare();
-    // ... 鎵撳嵃 ...
-    free(pbuff);  // 濂戒範鎯細閲婃斁鍫嗗唴瀛?    return 0;
+    // ... 打印 ...
+    free(pbuff);  // 好习惯：释放堆内存
+    return 0;
 }
 ```
 
-> 鍙橀噺鍥涜薄闄愶細鍏ㄥ眬 鈫?闈欐€佸叏灞€ 鈫?闈欐€佸眬閮?鈫?鍫?malloc) 鈫?灞€閮?鏍?
+> 变量四象限：全局 → 静态全局 → 静态局部 → 堆(malloc) → 局部(栈)
 
-### 2. FreeRTOS 棣栦釜澶氫换鍔?
+### 2. FreeRTOS 首个多任务
+
 ```c
 #include "FreeRTOS.h"
 #include "task.h"
 
-// 浠诲姟1锛歀ED1 100ms 闂儊
+// 任务1：LED1 100ms 闪烁
 void vLED1Task(void *argument)
 {
     while (1) {
@@ -47,7 +54,8 @@ void vLED1Task(void *argument)
     }
 }
 
-// 浠诲姟2锛歀ED2 30ms/150ms 闈炲绉伴棯鐑?void vLED2Task(void *argument)
+// 任务2：LED2 30ms/150ms 非对称闪烁
+void vLED2Task(void *argument)
 {
     while (1) {
         HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET);
@@ -57,87 +65,103 @@ void vLED1Task(void *argument)
     }
 }
 
-// 浠诲姟3锛氫覆鍙ｆ瘡 1s 鍙戦€?"浣犲ソ涓栫晫"
+// 任务3：串口每 1s 发送 "你好世界"
 void usart_send_helloworld(void *task)
 {
     while (1) {
-        HAL_UART_Transmit(&huart1, (uint8_t*)"浣犲ソ涓栫晫\n", strlen(...), HAL_MAX_DELAY);
+        HAL_UART_Transmit(&huart1, (uint8_t*)"你好世界\n", strlen(...), HAL_MAX_DELAY);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
-// 鍚姩
+// 启动
 xTaskCreate(vLED1Task, "LED1", 128, NULL, 1, NULL);
 xTaskCreate(vLED2Task, "LED2", 128, NULL, 1, NULL);
 xTaskCreate(usart_send_helloworld, "UART", 128, NULL, 1, NULL);
-vTaskStartScheduler();  // 璋冨害鍣ㄥ惎鍔紝姘镐笉杩斿洖
+vTaskStartScheduler();  // 调度器启动，永不返回
 ```
 
 ---
 
-## 浜屻€佹牳蹇冪煡璇嗙偣
+## 二、核心知识点
 
-### 1. FreeRTOS 涓夊ぇ纭欢鍩虹煶
+### 1. FreeRTOS 三大硬件基石
 
-| 寮傚父 | 浣滅敤 | 浼樺厛绾?| 鍙ｈ瘈 |
+| 异常 | 作用 | 优先级 | 口诀 |
 |------|------|--------|------|
-| **SysTick** | 鎻愪緵 tick 鏃堕挓锛岄┍鍔ㄦ椂闂寸墖 | 鏈€浣?| 鎶ユ椂 |
-| **SVC** | 鍚姩绗竴涓换鍔?| **鏈€楂?* | 璧疯窇 |
-| **PendSV** | 鎵ц涓婁笅鏂囧垏鎹?| 鏈€浣?| 鎹㈠満涓嶆墦鎵?|
+| **SysTick** | 提供 tick 时钟，驱动时间片 | 最低 | 报时 |
+| **SVC** | 启动第一个任务 | **最高** | 起跑 |
+| **PendSV** | 执行上下文切换 | 最低 | 换场不打扰 |
 
-> PendSV 浼樺厛绾ф渶浣庯紝淇濊瘉鎵€鏈?ISR 鎵ц瀹屾瘯鍐嶅垏鎹⑩€斺€旇繖鏄?RTOS 璁捐鐨勭簿楂?
-### 2. 璋冨害鍣ㄤ笁绉嶆ā寮?
-| 妯″紡 | 琛屼负 |
+> PendSV 优先级最低，保证所有 ISR 执行完毕再切换——这是 RTOS 设计的精髓
+
+### 2. 调度器三种模式
+
+| 模式 | 行为 |
 |------|------|
-| 甯︽椂闂寸墖鎶㈠崰 | 鍚屼紭鍏堢骇杞祦鎵ц锛坄configUSE_TIME_SLICING=1`锛?|
-| 涓嶅甫鏃堕棿鐗囨姠鍗?| 楂樹紭鍏堢骇绔嬪嵆鎶㈠崰锛屽悓绾ч渶涓诲姩璁╁嚭 CPU |
-| 鍗忎綔寮?| 浠诲姟蹇呴』涓诲姩閲婃斁锛屽惁鍒欑嫭鍗?|
+| 带时间片抢占 | 同优先级轮流执行（`configUSE_TIME_SLICING=1`） |
+| 不带时间片抢占 | 高优先级立即抢占，同级需主动让出 CPU |
+| 协作式 | 任务必须主动释放，否则独占 |
 
-### 3. xTaskCreate 鍏弬鏁?
+### 3. xTaskCreate 六参数
+
 ```
-xTaskCreate(浠诲姟鍑芥暟, "鍚嶇О", 鏍堟繁搴?瀛?, 鍙傛暟, 浼樺厛绾? 鍙ユ焺)
+xTaskCreate(任务函数, "名称", 栈深度(字), 参数, 优先级, 句柄)
 ```
 
-| 鍙傛暟 | 璇存槑 | 甯歌鍧?|
+| 参数 | 说明 | 常见坑 |
 |------|------|--------|
-| 鏍堟繁搴?| 鍗曚綅 word(4瀛楄妭) | 璁惧お灏?鈫?鏍堟孩鍑猴紝寤鸿 脳1.5~2 鍊嶄及绠?|
-| 浼樺厛绾?| 鏁板€艰秺澶ц秺楂?| 0 鏄┖闂蹭换鍔′紭鍏堢骇 |
+| 栈深度 | 单位 word(4字节) | 设太小 → 栈溢出，建议 ×1.5~2 倍估算 |
+| 优先级 | 数值越大越高 | 0 是空闲任务优先级 |
 
-### 4. 浜旂鍫嗘柟妗堬紙heap_1~5锛?
-| 鏂规 | 鐗圭偣 | 閫傜敤 |
+### 4. 五种堆方案（heap_1~5）
+
+| 方案 | 特点 | 适用 |
 |------|------|------|
-| heap_1 | 鍙垎閰嶄笉閲婃斁 | 闈欐€佷换鍔?|
-| heap_2 | 鍙噴鏀撅紝涓嶅悎骞剁鐗?| 宸茶繃鏃?|
-| heap_3 | 灏佽 malloc/free | 闇€淇濊瘉绾跨▼瀹夊叏 |
-| **heap_4** | **鍚堝苟绌洪棽鍧?* | **鏈€甯哥敤** |
-| heap_5 | heap_4 + 璺ㄥ鍧楀唴瀛?| 鏈夊閮?SRAM 鏃?|
+| heap_1 | 只分配不释放 | 静态任务 |
+| heap_2 | 可释放，不合并碎片 | 已过时 |
+| heap_3 | 封装 malloc/free | 需保证线程安全 |
+| **heap_4** | **合并空闲块** | **最常用** |
+| heap_5 | heap_4 + 跨多块内存 | 有外部 SRAM 时 |
 
-### 5. FreeRTOSConfig.h 鍏抽敭閰嶇疆
+### 5. FreeRTOSConfig.h 关键配置
 
 ```c
-#define configCPU_CLOCK_HZ                    72000000   // 涓婚
+#define configCPU_CLOCK_HZ                    72000000   // 主频
 #define configTICK_TYPE_WIDTH_IN_BITS         TICK_TYPE_WIDTH_32_BITS
-#define configKERNEL_INTERRUPT_PRIORITY       (15 << 4)  // ST鍙敤楂?浣?#define configMAX_SYSCALL_INTERRUPT_PRIORITY  (5 << 4)   // 楂樹簬姝や笉鍙桝PI骞叉壈
+#define configKERNEL_INTERRUPT_PRIORITY       (15 << 4)  // ST只用高4位
+#define configMAX_SYSCALL_INTERRUPT_PRIORITY  (5 << 4)   // 高于此不受API干扰
 #define configUSE_TIME_SLICING                1
-#define configCHECK_FOR_STACK_OVERFLOW        0           // 璋冭瘯闃舵鏆傛椂鍏抽棴
+#define configCHECK_FOR_STACK_OVERFLOW        0           // 调试阶段暂时关闭
 ```
 
-### 6. 浠诲姟闂撮€氫俊鍏ㄥ绂?
-```
-闃熷垪 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 鏁版嵁浼犺緭锛堝揩閫掍紶閫佸甫锛?浜岃繘鍒朵俊鍙烽噺 鈹€鈹€鈹€鈹€ 鍚屾锛堢孩缁跨伅锛?璁℃暟淇″彿閲?鈹€鈹€鈹€鈹€鈹€鈹€ 璧勬簮绠＄悊锛堝仠杞︿綅闂告満锛?浜掓枼閲?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 浼樺厛绾у弽杞繚鎶?浜嬩欢缁?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 澶氭潯浠朵笌/鎴栬Е鍙?浠诲姟閫氱煡 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ 杞婚噺绾у崟鍊奸偖绠?```
+### 6. 任务间通信全家福
 
-### 7. 鍙橀噺鍥涜薄闄愶紙闈㈣瘯楂橀锛?
-| 绫诲瀷 | 浣滅敤鍩?| 鐢熷懡鍛ㄦ湡 | 瀛樺偍鍖?|
+```
+队列 ──────────── 数据传输（快递传送带）
+二进制信号量 ──── 同步（红绿灯）
+计数信号量 ────── 资源管理（停车位闸机）
+互斥量 ────────── 优先级反转保护
+事件组 ────────── 多条件与/或触发
+任务通知 ──────── 轻量级单值邮箱
+```
+
+### 7. 变量四象限（面试高频）
+
+| 类型 | 作用域 | 生命周期 | 存储区 |
 |------|--------|----------|--------|
-| 鍏ㄥ眬鍙橀噺 | 鎵€鏈夋枃浠?| 鏁翠釜绋嬪簭 | 鏁版嵁娈?|
-| 闈欐€佸叏灞€ | 褰撳墠鏂囦欢 | 鏁翠釜绋嬪簭 | 鏁版嵁娈?|
-| **闈欐€佸眬閮?* | 褰撳墠鍑芥暟 | **鏁翠釜绋嬪簭** | 鏁版嵁娈?|
-| 鍫嗗彉閲?| 鏈夋寚閽堝 | free 涓烘 | 鍫?|
-| 灞€閮ㄥ彉閲?| 褰撳墠鍑芥暟 | 鍑芥暟閫€鍑?| 鏍?|
+| 全局变量 | 所有文件 | 整个程序 | 数据段 |
+| 静态全局 | 当前文件 | 整个程序 | 数据段 |
+| **静态局部** | 当前函数 | **整个程序** | 数据段 |
+| 堆变量 | 有指针处 | free 为止 | 堆 |
+| 局部变量 | 当前函数 | 函数退出 | 栈 |
 
-> 闈欐€佸眬閮ㄥ彉閲忎笉闅忓嚱鏁板帇鏍堝嚭鏍堚€斺€旂紪璇戞椂鍒嗛厤鍦ㄦ暟鎹锛屽浐瀹氬湴鍧€
+> 静态局部变量不随函数压栈出栈——编译时分配在数据段，固定地址
 
 ---
 
-## 涓夈€佸績寰?
-- 瑁告満鐘舵€佹満 鈫?FreeRTOS 浠诲姟锛屼笉鏄帹鍊掗噸鏉ワ紝鏄妸 `switch-case` 鍗囩骇涓虹郴缁熷府浣犺皟搴?- SysTick/SVC/PendSV 涓変釜寮傚父鏄?RTOS 鐨勫叏閮ㄧ‖浠朵緷璧栤€斺€旂悊瑙ｅ畠浠氨鐞嗚В浜?鎿嶄綔绯荤粺"鐨勬湰璐?- 鏍堟繁搴?128 鏄粡楠岃捣鐐癸紝姝ｅ紡椤圭洰鐢?`uxTaskGetStackHighWaterMark()` 瀹炴祴鍚庡啀璋冧紭
+## 三、心得
+
+- 裸机状态机 → FreeRTOS 任务，不是推倒重来，是把 `switch-case` 升级为系统帮你调度
+- SysTick/SVC/PendSV 三个异常是 RTOS 的全部硬件依赖——理解它们就理解了"操作系统"的本质
+- 栈深度 128 是经验起点，正式项目用 `uxTaskGetStackHighWaterMark()` 实测后再调优

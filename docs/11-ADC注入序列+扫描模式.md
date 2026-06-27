@@ -1,24 +1,27 @@
-# 6.14 ADC 瀹氭椂鍣ㄨЕ鍙戞敞鍏ュ簭鍒?+ 鎵弿妯″紡
+# 6.14 ADC 定时器触发注入序列 + 扫描模式
 
-> **鑺墖**锛歋TM32F103C8T6 | **鐜**锛歏SCode + Keil + Keil Assistant  
-> **涓婚**锛歍IM1_TRGO 瑙﹀彂 ADC銆佹敞鍏ュ簭鍒椼€佹壂鎻忔ā寮忋€佸璺噰闆?
+> **芯片**：STM32F103C8T6 | **环境**：VSCode + Keil + Keil Assistant  
+> **主题**：TIM1_TRGO 触发 ADC、注入序列、扫描模式、多路采集
+
 ---
 
-## 涓€銆佹牳蹇冧唬鐮?
-### 1. 瀹氭椂鍣ㄨЕ鍙戞敞鍏ュ簭鍒楅厤缃?
+## 一、核心代码
+
+### 1. 定时器触发注入序列配置
+
 ```c
 void Init_TIM_Injected_Sequence(void)
 {
-    // ----- TIM1: 姣?1ms 浜х敓鏇存柊浜嬩欢浣?TRGO -----
+    // ----- TIM1: 每 1ms 产生更新事件作 TRGO -----
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM1, ENABLE);
     TIM_TimeBaseInitTypeDef tim = {0};
     tim.TIM_Prescaler = 71;
     tim.TIM_Period    = 999;    // 1ms
     TIM_TimeBaseInit(TIM1, &tim);
-    TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_Update);  // 涓绘ā寮忥細杈撳嚭鏇存柊浜嬩欢
+    TIM_SelectOutputTrigger(TIM1, TIM_TRGOSource_Update);  // 主模式：输出更新事件
     TIM_Cmd(TIM1, ENABLE);
 
-    // ----- ADC: 娉ㄥ叆搴忓垪锛孴IM1_TRGO 瑙﹀彂 -----
+    // ----- ADC: 注入序列，TIM1_TRGO 触发 -----
     RCC_ADCCLKConfig(RCC_PCLK2_Div6);
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
 
@@ -29,32 +32,33 @@ void Init_TIM_Injected_Sequence(void)
     adc.ADC_ExternalTrigConv   = ADC_ExternalTrigConv_None;
     ADC_Init(ADC1, &adc);
 
-    // 娉ㄥ叆搴忓垪锛? 涓€氶亾锛孴IM1_TRGO 瑙﹀彂
+    // 注入序列：1 个通道，TIM1_TRGO 触发
     ADC_InjectedSequencerLengthConfig(ADC1, 1);
     ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_T1_TRGO);
     ADC_ExternalTrigInjectedConvCmd(ADC1, ENABLE);
     ADC_InjectedChannelConfig(ADC1, ADC_Channel_0, 1, ADC_SampleTime_13Cycles5);
 
-    // 鏍″噯
+    // 校准
     ADC_Cmd(ADC1, ENABLE);
     ADC_ResetCalibration(ADC1);  while (ADC_GetResetCalibrationStatus(ADC1));
     ADC_StartCalibration(ADC1);  while (ADC_GetCalibrationStatus(ADC1));
-    ADC_Cmd(ADC1, DISABLE);      // 鐣欑粰鐘舵€佹満鎺у埗
+    ADC_Cmd(ADC1, DISABLE);      // 留给状态机控制
 }
 ```
 
-### 2. JEOC 涓柇 + 娉ㄥ叆搴忓垪鐘舵€佹満
+### 2. JEOC 中断 + 注入序列状态机
 
 ```c
-// 涓柇锛氬彧缃爣蹇椾綅
+// 中断：只置标志位
 void ADC1_2_IRQHandler(void)
 {
     if (ADC_GetFlagStatus(ADC1, ADC_FLAG_JEOC) == SET) {
         ADC_ClearFlag(ADC1, ADC_FLAG_JEOC);
-        PS_STATE = PS_OK;   // 閫氱煡涓诲惊鐜?    }
+        PS_STATE = PS_OK;   // 通知主循环
+    }
 }
 
-// 鐘舵€佹満锛氳Е鍙?鈫?绛?JEOC 鈫?澶勭悊 鈫?闂撮殧
+// 状态机：触发 → 等 JEOC → 处理 → 间隔
 void IS_state_machine(void)
 {
     switch (ps_state) {
@@ -65,14 +69,15 @@ void IS_state_machine(void)
         break;
 
     case PS_SEND_PULSE:
-        ADC_Cmd(ADC1, ENABLE);   // 寮€ ADC锛孴IM1_TRGO 鑷姩姣?1ms 瑙﹀彂涓€娆?        ps_state = PS_WAIT_EOC;
+        ADC_Cmd(ADC1, ENABLE);   // 开 ADC，TIM1_TRGO 自动每 1ms 触发一次
+        ps_state = PS_WAIT_EOC;
         break;
 
     case PS_WAIT_EOC:
-        if (PS_STATE == PS_OK) {         // JEOC 涓柇宸茬疆鏍囧織
+        if (PS_STATE == PS_OK) {         // JEOC 中断已置标志
             PS_STATE = PS_NO;
             ps_state = PS_PROCESS;
-        } else if (currentTick - ps_time > 20)  // 20ms 瓒呮椂
+        } else if (currentTick - ps_time > 20)  // 20ms 超时
             ps_state = PS_INTERVAL;
         break;
 
@@ -86,46 +91,48 @@ void IS_state_machine(void)
         break;
 
     case PS_INTERVAL:
-        ADC_Cmd(ADC1, ENABLE);           // 閲嶆柊寮€锛岀瓑涓嬩竴娆?JEOC
+        ADC_Cmd(ADC1, ENABLE);           // 重新开，等下一次 JEOC
         ps_state = PS_WAIT_EOC;
         break;
     }
 }
 ```
 
-### 3. 鎵弿妯″紡锛堝弻閫氶亾鑷姩閲囬泦锛?
+### 3. 扫描模式（双通道自动采集）
+
 ```c
 void Init_ADC_scan_patterns(void)
 {
-    // ----- 鍙岄€氶亾閰嶇疆 -----
+    // ----- 双通道配置 -----
     ADC_InitTypeDef adc = {0};
-    adc.ADC_ScanConvMode = ENABLE;    // 寮€鍚壂鎻?    adc.ADC_NbrOfChannel = 2;         // 2 涓€氶亾
+    adc.ADC_ScanConvMode = ENABLE;    // 开启扫描
+    adc.ADC_NbrOfChannel = 2;         // 2 个通道
     ADC_Init(ADC1, &adc);
 
     ADC_InjectedSequencerLengthConfig(ADC1, 2);
     ADC_InjectedChannelConfig(ADC1, ADC_Channel_0, 1, ADC_SampleTime_13Cycles5);
     ADC_InjectedChannelConfig(ADC1, ADC_Channel_1, 2, ADC_SampleTime_13Cycles5);
-    // 瑙﹀彂涓€娆?鈫?纭欢鑷姩渚濇杞崲 CH0 鈫?CH1
+    // 触发一次 → 硬件自动依次转换 CH0 → CH1
 }
 
 void scan_state_machine(void)
 {
-    // ... 鍚屾敞鍏ュ簭鍒楁鏋?...
+    // ... 同注入序列框架 ...
     case PS_PROCESS:
         uint16_t jdr1 = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_1);
         uint16_t jdr2 = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_2);
         float v1 = jdr1 * (3.3f / 4095);
         float v2 = jdr2 * (3.3f / 4095);
 
-        // 鍙岃矾缁勫悎閫昏緫鎺у埗 LED
-        if (v1 > 1.5 && v2 > 1.5)       LED_STATE = LED_ON;       // 甯镐寒
-        else if (v1 < 1.5 && v2 < 1.5)  LED_STATE = LED_FLICKER;  // 闂儊
-        else                             LED_STATE = LED_OFF;      // 鐔勭伃
+        // 双路组合逻辑控制 LED
+        if (v1 > 1.5 && v2 > 1.5)       LED_STATE = LED_ON;       // 常亮
+        else if (v1 < 1.5 && v2 < 1.5)  LED_STATE = LED_FLICKER;  // 闪烁
+        else                             LED_STATE = LED_OFF;      // 熄灭
         break;
 }
 ```
 
-### 4. LED 闂儊瀛愮姸鎬佹満
+### 4. LED 闪烁子状态机
 
 ```c
 void LED_1_state_machine(void)
@@ -151,63 +158,73 @@ void LED_1_state_machine(void)
 
 ---
 
-## 浜屻€佹牳蹇冪煡璇嗙偣
+## 二、核心知识点
 
 ### 1. Input Trigger vs Output Trigger
 
-| 鍑芥暟 | 鏂瑰悜 | 瀵勫瓨鍣?| 鍙ｈ瘈 |
+| 函数 | 方向 | 寄存器 | 口诀 |
 |------|------|--------|------|
-| `TIM_SelectInputTrigger` | 澶栭儴鈫掓湰瀹氭椂鍣?| SMCR | **鍒汉瑙﹀彂鎴?* |
-| `TIM_SelectOutputTrigger` | 鏈畾鏃跺櫒鈫掑閮?| CR2 | **鎴戣Е鍙戝埆浜?* |
+| `TIM_SelectInputTrigger` | 外部→本定时器 | SMCR | **别人触发我** |
+| `TIM_SelectOutputTrigger` | 本定时器→外部 | CR2 | **我触发别人** |
 
-### 2. 瀹氭椂鍣ㄨЕ鍙?ADC 瀹屾暣閾捐矾
+### 2. 定时器触发 ADC 完整链路
 
 ```
-TIM1 姣?1ms 鏇存柊浜嬩欢 鈫?TRGO 杈撳嚭
-    鈫?ADC1 娉ㄥ叆搴忓垪澶栭儴瑙﹀彂婧?= TIM1_TRGO
-    鈫?TRGO 鑴夊啿 鈫?ADC 鑷姩杞崲娉ㄥ叆閫氶亾 鈫?JEOC 涓柇
-    鈫?ISR 缃爣蹇椾綅 鈫?涓诲惊鐜姸鎬佹満澶勭悊
+TIM1 每 1ms 更新事件 → TRGO 输出
+    ↓
+ADC1 注入序列外部触发源 = TIM1_TRGO
+    ↓
+TRGO 脉冲 → ADC 自动转换注入通道 → JEOC 中断
+    ↓
+ISR 置标志位 → 主循环状态机处理
 ```
 
-> CPU 瀹屽叏涓嶅弬涓庤Е鍙戯紝鍙彇缁撴灉鈥斺€旀晥鐜囪繙瓒呰蒋浠惰疆璇?
-### 3. 娉ㄥ叆搴忓垪 vs 甯歌搴忓垪
+> CPU 完全不参与触发，只取结果——效率远超软件轮询
 
-| 鐗规€?| 甯歌搴忓垪 | 娉ㄥ叆搴忓垪 |
+### 3. 注入序列 vs 常规序列
+
+| 特性 | 常规序列 | 注入序列 |
 |------|----------|----------|
-| 閫氶亾鏁?| 1~16 | 1~4 |
-| 缁撴灉瀵勫瓨鍣?| 鍏辩敤 1 涓?DR | 鍚勯€氶亾鐙珛 JDR1~4 |
-| 浼樺厛绾?| 鏅€?| **鍙姠鍗犲父瑙勫簭鍒?* |
-| DMA | 鏀寔 | 涓嶆敮鎸?|
-| 鍏稿瀷鍦烘櫙 | 鍛ㄦ湡鎬у贰妫€ | 绮剧‘鏃跺埢閲囨牱锛堝鐩歌瑙﹀彂锛?|
+| 通道数 | 1~16 | 1~4 |
+| 结果寄存器 | 共用 1 个 DR | 各通道独立 JDR1~4 |
+| 优先级 | 普通 | **可抢占常规序列** |
+| DMA | 支持 | 不支持 |
+| 典型场景 | 周期性巡检 | 精确时刻采样（如相角触发） |
 
-### 4. 鎵弿妯″紡鏈哄埗
+### 4. 扫描模式机制
 
 ```
-瑙﹀彂涓€娆?鈫?CH0 閲囨牱 鈫?瀛?JDR1 鈫?CH1 閲囨牱 鈫?瀛?JDR2 鈫?JEOC 涓柇
+触发一次 → CH0 采样 → 存 JDR1 → CH1 采样 → 存 JDR2 → JEOC 中断
 ```
 
-鏃犻渶姣忎釜閫氶亾鐙珛瑙﹀彂锛岀‖浠惰嚜鍔ㄦ寜搴忓畬鎴愩€?
-### 5. ADC 鏍″噯娴佺▼
+无需每个通道独立触发，硬件自动按序完成。
+
+### 5. ADC 校准流程
 
 ```c
 ADC_Cmd(ADC1, ENABLE);
-ADC_ResetCalibration(ADC1);   // 澶嶄綅鏍″噯
+ADC_ResetCalibration(ADC1);   // 复位校准
 while (ADC_GetResetCalibrationStatus(ADC1));
-ADC_StartCalibration(ADC1);   // 鍚姩鏍″噯
+ADC_StartCalibration(ADC1);   // 启动校准
 while (ADC_GetCalibrationStatus(ADC1));
 ```
 
-> 鏍″噯搴斿湪 ADC 浣胯兘鍚庤繘琛岋紝淇濊瘉 12 浣嶇簿搴?
-### 6. 缁熶竴鐘舵€佹満妗嗘灦
+> 校准应在 ADC 使能后进行，保证 12 位精度
+
+### 6. 统一状态机框架
 
 ```
-ps_init 鈫?ps_send_pulse 鈫?ps_wait_conv_ok 鈫?ps_process 鈫?ps_interval
-   鈫?       (浣胯兘ADC)      (绛塉EOC/瓒呮椂)     (鍙栫粨鏋?     (寰幆/閲嶅惎)
-   鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ ps_restart (鎸夐敭5s鍚? 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?```
+ps_init → ps_send_pulse → ps_wait_conv_ok → ps_process → ps_interval
+   ↑        (使能ADC)      (等JEOC/超时)     (取结果)     (循环/重启)
+   └────────────────── ps_restart (按键5s后) ──────────────┘
+```
 
-鍗曢€氶亾銆佹敞鍏ュ簭鍒椼€佹壂鎻忔ā寮忓叡鐢ㄦ妗嗘灦锛屼粎 `ps_process` 涓鍙栭€昏緫涓嶅悓銆?
+单通道、注入序列、扫描模式共用此框架，仅 `ps_process` 中读取逻辑不同。
+
 ---
 
-## 涓夈€佸績寰?
-- `TIM_SelectOutputTrigger` + ADC 澶栭儴瑙﹀彂 = 宓屽叆寮?鑷姩椹鹃┒"鈥斺€擟PU 闆跺弬涓庯紝瀹氭椂绮惧害杩滆秴杞欢鏂规
-- 鎵弿妯″紡璁╁璺噰闆嗕粠"鍐?N 涓姸鎬佹満"鍙樻垚"閰?N 涓€氶亾"锛岀‖浠舵浛浣犲仛浜嗗苟琛?- 浠?6.1 鐨勭偣浜?LED 鍒?6.14 鐨勫弻閫氶亾瀹氭椂鍣ㄨЕ鍙?ADC 鎵弿鈥斺€?4 澶╋紝浣犵殑鐘舵€佹満妗嗘灦宸叉垚鐔熷埌"濉┖鍗崇敤"鐨勭▼搴
+## 三、心得
+
+- `TIM_SelectOutputTrigger` + ADC 外部触发 = 嵌入式"自动驾驶"——CPU 零参与，定时精度远超软件方案
+- 扫描模式让多路采集从"写 N 个状态机"变成"配 N 个通道"，硬件替你做了并行
+- 从 6.1 的点亮 LED 到 6.14 的双通道定时器触发 ADC 扫描——14 天，你的状态机框架已成熟到"填空即用"的程度

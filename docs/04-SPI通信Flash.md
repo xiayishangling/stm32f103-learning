@@ -1,35 +1,38 @@
-# 6.4 SPI 閫氫俊 + W25Q64 Flash
+# 6.4 SPI 通信 + W25Q64 Flash
 
-> **鑺墖**锛歋TM32F103C8T6 | **鐜**锛歏SCode + Keil + Keil Assistant  
-> **涓婚**锛歋PI 鍏ㄥ弻宸ャ€乄25Q64 Flash 璇诲啓銆丣TAG 閲婃斁銆佸€熸椂閽熷師鐞嗐€両2C vs SPI 瀵规瘮
+> **芯片**：STM32F103C8T6 | **环境**：VSCode + Keil + Keil Assistant  
+> **主题**：SPI 全双工、W25Q64 Flash 读写、JTAG 释放、借时钟原理、I2C vs SPI 对比
 
 ---
 
-## 涓€銆佹牳蹇冧唬鐮?
-### 1. SPI 鍒濆鍖栵紙閲婃斁 JTAG + 閲嶆槧灏勶級
+## 一、核心代码
+
+### 1. SPI 初始化（释放 JTAG + 重映射）
 
 ```c
 void init_SPI_GPIO(void)
 {
-    // 閲婃斁 PA15锛圝TAG JTDI 鈫?鏅€?GPIO锛?    RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
+    // 释放 PA15（JTAG JTDI → 普通 GPIO）
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
     GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
     GPIO_PinRemapConfig(GPIO_Remap_SPI1, ENABLE);
 
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB, ENABLE);
     GPIO_InitTypeDef g = {0};
 
-    // PB3(SCK) + PB5(MOSI) 鈫?AF_PP
+    // PB3(SCK) + PB5(MOSI) → AF_PP
     g.GPIO_Pin   = GPIO_Pin_3 | GPIO_Pin_5;
-    g.GPIO_Speed = GPIO_Speed_2MHz;  // 闈㈠寘鏉夸綆閫熼槻鎸搩
+    g.GPIO_Speed = GPIO_Speed_2MHz;  // 面包板低速防振铃
     g.GPIO_Mode  = GPIO_Mode_AF_PP;
     GPIO_Init(GPIOB, &g);
 
-    // PB4(MISO) 鈫?IPU
+    // PB4(MISO) → IPU
     g.GPIO_Pin  = GPIO_Pin_4;
     g.GPIO_Mode = GPIO_Mode_IPU;
     GPIO_Init(GPIOB, &g);
 
-    // PA15(CS) 鈫?Out_PP锛岄粯璁ゆ媺楂橈紙鏈€変腑锛?    g.GPIO_Pin  = GPIO_Pin_15;
+    // PA15(CS) → Out_PP，默认拉高（未选中）
+    g.GPIO_Pin  = GPIO_Pin_15;
     g.GPIO_Mode = GPIO_Mode_Out_PP;
     GPIO_Init(GPIOA, &g);
     GPIO_WriteBit(GPIOA, GPIO_Pin_15, Bit_SET);
@@ -41,7 +44,7 @@ void init_SPI(void)
     SPI_InitTypeDef s = {0};
     s.SPI_Direction         = SPI_Direction_2Lines_FullDuplex;
     s.SPI_Mode              = SPI_Mode_Master;
-    s.SPI_CPHA              = SPI_CPHA_1Edge;   // 妯″紡0
+    s.SPI_CPHA              = SPI_CPHA_1Edge;   // 模式0
     s.SPI_CPOL              = SPI_CPOL_Low;
     s.SPI_DataSize          = SPI_DataSize_8b;
     s.SPI_FirstBit          = SPI_FirstBit_MSB;
@@ -52,7 +55,7 @@ void init_SPI(void)
 }
 ```
 
-### 2. SPI 鍏ㄥ弻宸ユ敹鍙戯紙鍔ㄦ€佸紑鍏?+ BSY 妫€鏌ワ級
+### 2. SPI 全双工收发（动态开关 + BSY 检查）
 
 ```c
 int SPI_Send_and_Receive(SPI_TypeDef *SPIx, const uint8_t *TXData,
@@ -60,51 +63,60 @@ int SPI_Send_and_Receive(SPI_TypeDef *SPIx, const uint8_t *TXData,
 {
     if (TXData == NULL || RXData == NULL || Size <= 0) return ERR;
 
-    SPI_Cmd(SPIx, ENABLE);  // 鐢ㄦ椂寮€
+    SPI_Cmd(SPIx, ENABLE);  // 用时开
 
     for (uint16_t i = 0; i < Size; i++) {
-        // 绛?TXE 鈫?鍙?鈫?绛?RXNE 鈫?鏀?        while (SPI_I2S_GetFlagStatus(SPIx, SPI_I2S_FLAG_TXE) == RESET);
+        // 等 TXE → 发 → 等 RXNE → 收
+        while (SPI_I2S_GetFlagStatus(SPIx, SPI_I2S_FLAG_TXE) == RESET);
         SPI_I2S_SendData(SPIx, TXData[i]);
         while (SPI_I2S_GetFlagStatus(SPIx, SPI_I2S_FLAG_RXNE) == RESET);
         RXData[i] = SPI_I2S_ReceiveData(SPIx);
     }
 
-    // 蹇呴』绛?BSY=0锛岀‘淇濈Щ浣嶅瘎瀛樺櫒娓呯┖
+    // 必须等 BSY=0，确保移位寄存器清空
     while (SPI_I2S_GetFlagStatus(SPIx, SPI_I2S_FLAG_BSY) == SET);
-    SPI_Cmd(SPIx, DISABLE);  // 鐢ㄥ畬鍏?    return SPI_SUCCESS;
+    SPI_Cmd(SPIx, DISABLE);  // 用完关
+    return SPI_SUCCESS;
 }
 ```
 
-### 3. W25Q64 鍐欎竴涓瓧鑺?
+### 3. W25Q64 写一个字节
+
 ```c
 void SPI_W25Q64_Save_Byte(uint8_t Byte)
 {
     uint8_t buf[10];
 
-    // 鈶?鍐欎娇鑳?    buf[0] = 0x06;
+    // ① 写使能
+    buf[0] = 0x06;
     CS_LOW();  SPI_Send_and_Receive(SPI1, buf, buf, 1, 50);  CS_HIGH();
 
-    // 鈶?鎵囧尯鎿﹂櫎锛?x20 + 24浣嶅湴鍧€锛?    buf[0]=0x20; buf[1]=0x00; buf[2]=0x00; buf[3]=0x00;
+    // ② 扇区擦除（0x20 + 24位地址）
+    buf[0]=0x20; buf[1]=0x00; buf[2]=0x00; buf[3]=0x00;
     CS_LOW();  SPI_Send_and_Receive(SPI1, buf, buf, 4, 50);  CS_HIGH();
 
-    // 鈶?绛夌┖闂诧紙璇荤姸鎬佸瘎瀛樺櫒 bit0锛?    do {
+    // ③ 等空闲（读状态寄存器 bit0）
+    do {
         buf[0]=0x05; CS_LOW(); SPI_Send_and_Receive(SPI1, buf, buf, 1, 50);
         buf[0]=0xFF; SPI_Send_and_Receive(SPI1, buf, buf, 1, 50); CS_HIGH();
     } while ((buf[0] & 0x01) != 0);
 
-    // 鈶?鍐嶆鍐欎娇鑳?    buf[0]=0x06; CS_LOW(); SPI_Send_and_Receive(SPI1, buf, buf, 1, 50); CS_HIGH();
+    // ④ 再次写使能
+    buf[0]=0x06; CS_LOW(); SPI_Send_and_Receive(SPI1, buf, buf, 1, 50); CS_HIGH();
 
-    // 鈶?椤电紪绋嬶紙0x02 + 鍦板潃 + 鏁版嵁锛?    buf[0]=0x02; buf[1]=0x00; buf[2]=0x00; buf[3]=0x00; buf[4]=Byte;
+    // ⑤ 页编程（0x02 + 地址 + 数据）
+    buf[0]=0x02; buf[1]=0x00; buf[2]=0x00; buf[3]=0x00; buf[4]=Byte;
     CS_LOW();  SPI_Send_and_Receive(SPI1, buf, buf, 5, 50);  CS_HIGH();
 
-    // 鈶?绛夌┖闂?    do {
+    // ⑥ 等空闲
+    do {
         buf[0]=0x05; CS_LOW(); SPI_Send_and_Receive(SPI1, buf, buf, 1, 50);
         buf[0]=0xFF; SPI_Send_and_Receive(SPI1, buf, buf, 1, 50); CS_HIGH();
     } while ((buf[0] & 0x01) != 0);
 }
 ```
 
-### 4. W25Q64 璇讳竴涓瓧鑺傦紙鍊熸椂閽燂級
+### 4. W25Q64 读一个字节（借时钟）
 
 ```c
 uint8_t SPI_W25Q64_Read_Byte(void)
@@ -112,15 +124,15 @@ uint8_t SPI_W25Q64_Read_Byte(void)
     uint8_t buf[10];
     CS_LOW();
     buf[0]=0x03; buf[1]=0x00; buf[2]=0x00; buf[3]=0x00;
-    SPI_Send_and_Receive(SPI1, buf, buf, 4, 50);  // 鍙戝懡浠?鍦板潃
-    buf[0]=0xFF;  // dummy 瀛楄妭 鈥?鍊熸椂閽熺粰浠庢満杈撳嚭鏁版嵁
+    SPI_Send_and_Receive(SPI1, buf, buf, 4, 50);  // 发命令+地址
+    buf[0]=0xFF;  // dummy 字节 — 借时钟给从机输出数据
     SPI_Send_and_Receive(SPI1, buf, buf, 1, 50);
     CS_HIGH();
     return buf[0];
 }
 ```
 
-### 5. 楠岃瘉锛氬啓鍏?0x12 鈫?璇诲嚭姣斿 鈫?LED 鍙嶉
+### 5. 验证：写入 0x12 → 读出比对 → LED 反馈
 
 ```c
 void Process_SPI(void)
@@ -131,88 +143,102 @@ void Process_SPI(void)
     uint8_t a = SPI_W25Q64_Read_Byte();
 
     if (a == 0x12) {
-        // 姝ｇ‘ 鈫?LED 甯镐寒锛岀洿鍒版寜閿寜涓?        while (1) {
+        // 正确 → LED 常亮，直到按键按下
+        while (1) {
             GPIO_WriteBit(GPIOC, GPIO_Pin_13, Bit_RESET);
-            if (KEY_PRESSED()) break;  // 娑堟姈鍚庨€€鍑?        }
+            if (KEY_PRESSED()) break;  // 消抖后退出
+        }
     }
-    GPIO_WriteBit(GPIOC, GPIO_Pin_13, Bit_SET);  // 鐏伅
+    GPIO_WriteBit(GPIOC, GPIO_Pin_13, Bit_SET);  // 灭灯
 }
 ```
 
 ---
 
-## 浜屻€佹牳蹇冪煡璇嗙偣
+## 二、核心知识点
 
-### 1. SPI 鍥涚嚎寮曡剼
+### 1. SPI 四线引脚
 
-| 寮曡剼 | 鏂瑰悜 | 鍔熻兘 | 妯″紡 |
+| 引脚 | 方向 | 功能 | 模式 |
 |------|------|------|------|
-| **SCK** | 涓烩啋浠?| 鏃堕挓 | AF_PP |
-| **MOSI** | 涓烩啋浠?| 鏁版嵁杈撳嚭 | AF_PP |
-| **MISO** | 浠庘啋涓?| 鏁版嵁杈撳叆 | IPU |
-| **NSS/CS** | 涓烩啋浠?| 鐗囬€夛紙杞欢鎺у埗锛?| Out_PP |
+| **SCK** | 主→从 | 时钟 | AF_PP |
+| **MOSI** | 主→从 | 数据输出 | AF_PP |
+| **MISO** | 从→主 | 数据输入 | IPU |
+| **NSS/CS** | 主→从 | 片选（软件控制） | Out_PP |
 
-### 2. SPI 妯″紡锛圕POL/CPHA锛?
-| 妯″紡 | CPOL | CPHA | W25Q64 |
+### 2. SPI 模式（CPOL/CPHA）
+
+| 模式 | CPOL | CPHA | W25Q64 |
 |------|------|------|--------|
-| 0 | 0锛堢┖闂蹭綆锛?| 0锛堢1杈规部閲囨牱锛?| 鉁?|
-| 1 | 0 | 1锛堢2杈规部锛?| |
-| 2 | 1锛堢┖闂查珮锛?| 0 | |
+| 0 | 0（空闲低） | 0（第1边沿采样） | ✅ |
+| 1 | 0 | 1（第2边沿） | |
+| 2 | 1（空闲高） | 0 | |
 | 3 | 1 | 1 | |
 
-### 3. 鍊熸椂閽熷師鐞嗭紙璇?Flash 涓轰粈涔堣鍙?0xFF锛?
-```
-SPI 鏃堕挓瀹屽叏鐢变富鏈轰骇鐢熴€傚彂閫?0x03+鍦板潃鍚庯紝浠庢満宸插噯澶囧ソ鏁版嵁锛?浣嗘病鏈変富鏈烘椂閽熷氨鏃犳硶杈撳嚭銆傚彂 0xFF锛堟垨鍏朵粬浠绘剰鍊硷級= 浜х敓 8 涓椂閽燂紝
-浠庢満瓒佹満鎶婃暟鎹帹鍒?MISO 涓娿€?```
+### 3. 借时钟原理（读 Flash 为什么要发 0xFF）
 
-### 4. W25Q64 鍐欐祦绋?
 ```
-鍐欎娇鑳?0x06) 鈫?鎵囧尯鎿﹂櫎(0x20+24浣嶅湴鍧€) 鈫?绛塀USY=0 鈫?鍐欎娇鑳?鈫?椤电紪绋?0x02+鍦板潃+鏁版嵁) 鈫?绛塀USY=0
+SPI 时钟完全由主机产生。发送 0x03+地址后，从机已准备好数据，
+但没有主机时钟就无法输出。发 0xFF（或其他任意值）= 产生 8 个时钟，
+从机趁机把数据推到 MISO 上。
 ```
 
-> 鎵囧尯鎿﹂櫎鏄繀椤荤殑锛欶lash 鍙兘鎶?1 鍐欐垚 0锛岃鍐欐柊鏁版嵁蹇呴』鍏堟摝闄わ紙鍏ㄧ疆 1锛?
-### 5. 鐘舵€佸瘎瀛樺櫒璇诲彇鎶€宸?
+### 4. W25Q64 写流程
+
+```
+写使能(0x06) → 扇区擦除(0x20+24位地址) → 等BUSY=0 → 写使能 → 页编程(0x02+地址+数据) → 等BUSY=0
+```
+
+> 扇区擦除是必须的：Flash 只能把 1 写成 0，要写新数据必须先擦除（全置 1）
+
+### 5. 状态寄存器读取技巧
+
 ```c
-buf[0] = 0x05;  SPI_Send_and_Receive(SPI1, buf, buf, 1, 50);  // 鍙戝懡浠?buf[0] = 0xFF;  SPI_Send_and_Receive(SPI1, buf, buf, 1, 50);  // 鍊熸椂閽熷彇鐘舵€?// 姝ゆ椂 buf[0] 鎵嶆槸鐪熸鐨勭姸鎬佸€?```
-
-- BUSY 浣嶅湪 bit0锛歚(buf[0] & 0x01) == 0` 琛ㄧず绌洪棽
-- 娉ㄦ剰 `==` 浼樺厛绾ч珮浜?`&`锛屽繀椤诲姞鎷彿
-
-### 6. SPI 鍔ㄦ€佸紑鍏宠寖寮?
-```c
-SPI_Cmd(ENABLE);   // 鏀跺彂鍓嶅紑
-/* ... 鏀跺彂鎿嶄綔 ... */
-while (BSY == SET); // 绛夌Щ浣嶅瘎瀛樺櫒娓呯┖
-SPI_Cmd(DISABLE);  // 鏀跺彂鍚庡叧
+buf[0] = 0x05;  SPI_Send_and_Receive(SPI1, buf, buf, 1, 50);  // 发命令
+buf[0] = 0xFF;  SPI_Send_and_Receive(SPI1, buf, buf, 1, 50);  // 借时钟取状态
+// 此时 buf[0] 才是真正的状态值
 ```
 
-- 閬垮厤绌洪棽鏃舵€荤嚎鐘舵€佷笉纭畾
-- 鏈€鍚庝竴瀛楄妭鍙兘杩樺湪绉讳綅瀵勫瓨鍣ㄤ腑锛屽姟蹇呯瓑 BSY
+- BUSY 位在 bit0：`(buf[0] & 0x01) == 0` 表示空闲
+- 注意 `==` 优先级高于 `&`，必须加括号
 
-### 7. I2C vs SPI 瀵规瘮
+### 6. SPI 动态开关范式
 
-| 鐗规€?| I2C | SPI |
+```c
+SPI_Cmd(ENABLE);   // 收发前开
+/* ... 收发操作 ... */
+while (BSY == SET); // 等移位寄存器清空
+SPI_Cmd(DISABLE);  // 收发后关
+```
+
+- 避免空闲时总线状态不确定
+- 最后一字节可能还在移位寄存器中，务必等 BSY
+
+### 7. I2C vs SPI 对比
+
+| 特性 | I2C | SPI |
 |------|-----|-----|
-| 杩炵嚎 | 2 绾匡紙SCL/SDA锛?| 4 绾匡紙SCK/MOSI/MISO/CS锛?|
-| 瀵诲潃 | 璧峰鏉′欢鍚庡彂鍦板潃 | 鏃犲湴鍧€锛岄潬 CS 寮曡剼閫変粠鏈?|
-| 鍙屽伐 | 鍗婂弻宸?| **鍏ㄥ弻宸?*锛堝悓鏃舵敹鍙戯級 |
-| 娴佹帶 | 鏃堕挓鎷変几锛堜粠鏈烘媺浣?SCL锛?| 鏃犱粠鏈烘祦鎺?|
-| 搴旂瓟 | 姣忓瓧鑺傚悗 ACK/NAK | 鏃犻€愬瓧鑺傚簲绛?|
-| 閫熷害 | 100k/400k/3.4M | 鏈€楂樻暟鍗?MHz |
-| 甯у畾鐣?| START/STOP 鏉′欢 | CS 楂?浣庣數骞?|
+| 连线 | 2 线（SCL/SDA） | 4 线（SCK/MOSI/MISO/CS） |
+| 寻址 | 起始条件后发地址 | 无地址，靠 CS 引脚选从机 |
+| 双工 | 半双工 | **全双工**（同时收发） |
+| 流控 | 时钟拉伸（从机拉低 SCL） | 无从机流控 |
+| 应答 | 每字节后 ACK/NAK | 无逐字节应答 |
+| 速度 | 100k/400k/3.4M | 最高数十 MHz |
+| 帧定界 | START/STOP 条件 | CS 高/低电平 |
 
-### 8. PA15 閲婃斁 JTAG
+### 8. PA15 释放 JTAG
 
 ```c
 RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
 GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
-// PA15 姝ゆ椂鍙樹负鏅€?GPIO锛屽彲浣?CS 浣跨敤
+// PA15 此时变为普通 GPIO，可作 CS 使用
 ```
 
 ---
 
-## 涓夈€佸績寰?
-- SPI 姣?I2C 绠€鍗曚絾鏇村簳灞傦細鍏ㄥ弻宸ユ剰鍛崇潃**鍙戦€佸拰鎺ユ敹鍚屾椂鍙戠敓**锛岀悊瑙ｈ繖涓€鐐规墠鑳芥噦"鍊熸椂閽?
-- Flash 鍐欐搷浣滄槸宓屽叆寮忔渶缁忓吀鐨?*鍛戒护搴忓垪**锛氭瘡涓€姝ユ湁涓ユ牸鐨勫厛鍚庝緷璧栵紝鍑洪敊灏辨槸鏁版嵁涓㈠け
-- 闈㈠寘鏉跨幆澧?2MHz + 64 鍒嗛 = 1.125MHz 鏄粡楠屽€硷紝宸ョ▼涓?鑳界敤浣庨€熷氨涓嶇敤楂橀€?
-- `SPI_Cmd` 鍔ㄦ€佸紑鍏冲€煎緱鍏绘垚涔犳儻锛岀渷鐢典笖瀹夊叏
+## 三、心得
+
+- SPI 比 I2C 简单但更底层：全双工意味着**发送和接收同时发生**，理解这一点才能懂"借时钟"
+- Flash 写操作是嵌入式最经典的**命令序列**：每一步有严格的先后依赖，出错就是数据丢失
+- 面包板环境 2MHz + 64 分频 = 1.125MHz 是经验值，工程中"能用低速就不用高速"
+- `SPI_Cmd` 动态开关值得养成习惯，省电且安全
