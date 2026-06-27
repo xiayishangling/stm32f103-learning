@@ -7,12 +7,11 @@
 
 #ifdef UR_SENSOR_ENABLED
 void  vIP_UR_Task(void *argument);// 运行超声波状态机
-#endif
-
-#ifdef UR_SENSOR_ENABLED
 float Ultrasonic_Ranging_State_Machine(void);// 状态机（返回距离 m）
 #else
 #define Ultrasonic_Ranging_State_Machine()
-#endif
+#endif //UR_SENSOR_ENABLED
 
-#endif
+extern Sensor UR_Sensor;
+
+#endif //INC_UR_SENSOR_H_

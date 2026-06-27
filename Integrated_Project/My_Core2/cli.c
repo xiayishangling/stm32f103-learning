@@ -6,6 +6,9 @@
 #include "cli.h"
 #include "uart_dma.h"
 #include "w25q64.h"
+#include "ur_sensor.h"
+#include "ps_sensor.h"
+#include "app_common_err.h"
 
 #ifdef CLI_MODULE_ENABLED
 
@@ -54,7 +57,7 @@ void CLI_Parse(char *line)
     }
 
     /* 3. 未找到 */
-    UART_DMA_Printf("Unknown command: %s\r\nType 'help' to list commands.\r\n", argv[0]);
+    UART_DMA_Printf("Unknown_command: %s\r\nType 'help' to_list_commands.\r\n", argv[0]);
 }
 
 /* ========== 命令实现 ========== */
@@ -62,45 +65,101 @@ void CLI_Parse(char *line)
 // led <on|off|flicker>
 static void cmd_led(int argc, char *argv[])
 {
-    if (argc < 2) {
+    if (argc < 2) 
+    {
         UART_DMA_Printf("Usage: led <on|off|flicker>\r\n");
         return;
     }
 
-    USARTMessage msg;
-    memset(&msg, 0, sizeof(msg));
+    LED_State led_state;
+    OLED_State oled_state;
 
-    if (strcmp(argv[1], "on") == 0) {
-        msg.led_state  = LED_State_ON;
-        msg.oled_state = OLED_State_Display1;
-    } else if (strcmp(argv[1], "off") == 0) {
-        msg.led_state  = LED_State_OFF;
-        msg.oled_state = OLED_State_Display2;
-    } else if (strcmp(argv[1], "flicker") == 0) {
-        msg.led_state  = LED_State_Flicker;
-        msg.oled_state = OLED_State_Display3;
-    } else {
-        UART_DMA_Printf("Unknown arg: %s. Usage: led <on|off|flicker>\r\n", argv[1]);
+    if (strcmp(argv[1], "on") == 0) 
+    {
+        led_state  = LED_State_ON;
+        oled_state = OLED_State_Display1;
+    } 
+    else if (strcmp(argv[1], "off") == 0) 
+    {
+        led_state  = LED_State_OFF;
+        oled_state = OLED_State_Display2;
+    } 
+    else if (strcmp(argv[1], "flicker") == 0) 
+    {
+        led_state  = LED_State_Flicker;
+        oled_state = OLED_State_Display3;
+    } 
+    else 
+    {
+        UART_DMA_Printf("Unknown_arg: %s. Usage: led <on|off|flicker>\r\n", argv[1]);
         return;
     }
 
-    if (osMessageQueuePut(USART_QueueHandle, &msg, 0, pdMS_TO_TICKS(100)) != osOK) {
+    // 1. LED 状态 → LED 任务（只管 GPIO）
+    USARTMessage led_msg;
+    led_msg.led_state = led_state;
+    if (osMessageQueuePut(USART_QueueHandle, &led_msg, 0, pdMS_TO_TICKS(100)) != osOK) 
+    {
         UART_DMA_Printf("usartQueue_err\r\n");
     }
+
+    // 2. OLED 显示 → OLED 任务（CLI 统一入口）
+    OLEDDisplayRequest oled_req = {
+        .oled_state = oled_state,
+        .force_refresh = true
+    };
+    osMessageQueuePut(OLED_Display_QueueHandle, &oled_req, 0, 0);
 }
 
 // dist - 显示超声波距离
 static void cmd_dist(int argc, char *argv[])
 {
-    g_state.oled = OLED_State_Display_distance;
-    UART_DMA_Printf("Distance: %.3f m\r\n", g_state.ur_distance_m);
+    //发送显示请求
+    OLEDDisplayRequest req = {
+        .oled_state = OLED_State_Display_distance,
+        .force_refresh = true,
+        .Sensor = &UR_Sensor
+    };
+    osMessageQueuePut(OLED_Display_QueueHandle, &req, 0, 0);
+
+    if(g_state.ur_distance_m > 0)
+    {
+        UART_DMA_Printf("Distance: %.3f m\r\n", g_state.ur_distance_m);
+    }
+    else if(g_state.ur_distance_m == UR_ERR_WAIT_ECHO_TIMEOUT)
+    {
+        UART_DMA_Printf("UR_ERR_WAIT_ECHO_TIMEOUT\r\n");
+    }
+    else if(g_state.ur_distance_m == UR_ERR_OUTRANGE)
+    {
+        UART_DMA_Printf("UR_ERR_OUTRANGE\r\n");//连续三次测量失败 
+    }
+    else
+    {
+        // 例如距离为 0 或未初始化的状态
+        UART_DMA_Printf("UR_no_valid_reading_yet\r\n");
+    }
 }
 
 // lux - 显示光敏电压
 static void cmd_lux(int argc, char *argv[])
 {
-    g_state.oled = OLED_State_Display_voltage;
-    UART_DMA_Printf("Light voltage: %.3f V\r\n", g_state.ps_voltage_v);
+    //发送显示请求
+    OLEDDisplayRequest req = {
+        .oled_state = OLED_State_Display_voltage,
+        .force_refresh = true,
+        .Sensor = &PS_Sensor
+    };
+    osMessageQueuePut(OLED_Display_QueueHandle, &req, 0, 0);
+
+    if(g_state.ps_voltage_v > 0)
+    {
+        UART_DMA_Printf("Light_voltage: %.3f V\r\n", g_state.ps_voltage_v);
+    }
+    else
+    {
+        UART_DMA_Printf("PS_ERR_Wait_ADC_JEOC_TIMEOUT\r\n");
+    }
 }
 
 // set vthr xxx   dthr xxx  控制阈值
@@ -110,21 +169,28 @@ static void cmd_set(int argc, char *argv[])
         UART_DMA_Printf("Usage: set vthr <value> | dthr <value>\r\n");
         return;
     }
-    if (strcmp(argv[1], "vthr") == 0) {
+    if (strcmp(argv[1], "vthr") == 0) 
+    {
         g_state.voltage_threshold = atof(argv[2]);
-        UART_DMA_Printf("Voltage threshold set to %.2f V\r\n", g_state.voltage_threshold);
-    } else if (strcmp(argv[1], "dthr") == 0) {
+        UART_DMA_Printf("Voltage_threshold_set to %.2f V\r\n", g_state.voltage_threshold);
+    } 
+    else if (strcmp(argv[1], "dthr") == 0) 
+    {
         g_state.distance_threshold = atof(argv[2]);
-        UART_DMA_Printf("Distance threshold set to %.2f m\r\n", g_state.distance_threshold);
-    } else {
-        UART_DMA_Printf("Unknown parameter\r\n");
+        UART_DMA_Printf("Distance_threshold_set to %.2f m\r\n", g_state.distance_threshold);
+    } 
+    else 
+    {
+        UART_DMA_Printf("Unknown_parameter\r\n");
     }
 }
 
+//w25q64 扇擦除
 static void cmd_w25q64(int argc, char *argv[])
 {
-    if (argc < 2) {
-        UART_DMA_Printf("Usage: w25q64 clear\r\n");
+    if (argc < 2) 
+    {
+        UART_DMA_Printf("Usage: w25q64_clear\r\n");
         return;
     }
 
@@ -138,12 +204,16 @@ static void cmd_w25q64(int argc, char *argv[])
             g_state.distance_threshold = 0.1f;
             // 如果有其他从 Flash 恢复的字段也一并重置
 
-            UART_DMA_Printf("Configuration erased and defaults restored.\r\n");
-        } else {
-            UART_DMA_Printf("Erase failed.\r\n");
+            UART_DMA_Printf("Configuration_erased_and_defaults_restored.\r\n");
+        } 
+        else 
+        {
+            UART_DMA_Printf("Erase_failed.\r\n");
         }
-    } else {
-        UART_DMA_Printf("Unknown subcommand. Use 'w25q64 clear'.\r\n");
+    } 
+    else 
+    {
+        UART_DMA_Printf("Unknown_subcommand. Use 'w25q64 clear'.\r\n");
     }
 }
 

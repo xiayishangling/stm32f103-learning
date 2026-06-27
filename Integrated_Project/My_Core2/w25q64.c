@@ -1,8 +1,8 @@
 // w25q64.c —— W25Q64 SPI Flash 驱动：
-//   vIP_W25Q64Task   ：等待按键队列消息 → 保存或恢复 LED 状态
-//   W25Q64_Save_State ：先擦除扇区 → 再写入 1 字节
-//   W25Q64_Read_ME   ：读取扇区首字节
-//   W25Q64_WaitBusy   ：轮询状态寄存器等待芯片空闲
+//   vIP_W25Q64Task       ：上电/Load_Config 恢复，按键队列触发 Save/Load
+//   Load_Config          ：从 Flash 读取配置，恢复 g_state + 同步 OLED
+//   Save_Config          ：将 g_state 写入 Flash（LED/电压阈值/距离阈值）
+//   W25Q64_Save_All/Read_All/WaitBusy ：底层 SPI 读写擦除
 
 #include "w25q64.h"
 #include "uart_dma.h"
@@ -16,8 +16,8 @@
 #define W25Q64_CS_PIN PA4_W25Q64_Pin
 #define W25Q64_HANDLE hspi1
 
-// 等待 KEY_Queue 消息 → 读当前 PA3 电平 → 根据消息类型保存/恢复 LED 状态
-// 恢复后直接修改 g_state.led/oled，LED 任务会检测到变化
+// 等待 KEY_Queue 消息 → Save_Config 或 Load_Config
+// Load_Config 恢复后：直接改 g_state.led（LED 任务读到） + 发 OLED 请求（OLED 任务更新屏幕）
 void vIP_W25Q64Task(void *argument)
 {
     /* ---- 上电恢复（只执行一次） ---- */
@@ -67,6 +67,13 @@ static void Load_Config(void)
                         (g_state.led == LED_State_ON) ? "ON" : "OFF",
                         g_state.voltage_threshold,
                         g_state.distance_threshold);
+
+        // 同步 OLED 显示（与 CLI 保持同一契约：改状态 → 发 OLED 请求）
+        OLEDDisplayRequest oled_req = {
+            .oled_state = (g_state.led == LED_State_ON) ? OLED_State_Display1 : OLED_State_Display2,
+            .force_refresh = true
+        };
+        osMessageQueuePut(OLED_Display_QueueHandle, &oled_req, 0, 0);
     } 
     else 
     {
@@ -91,7 +98,7 @@ static void Save_Config(void)
                     g_state.distance_threshold);
 }
 
-// w25q64.c 中增加
+// 擦除配置扇区（扇区 0），用于 "w25q64 clear" 命令
 bool W25Q64_Erase_Config_Sector(void)
 {
     uint8_t cmd;
@@ -179,4 +186,3 @@ void W25Q64_WaitBusy(void)
 }
 
 #endif //W25Q64_MODULE_ENABLED
-

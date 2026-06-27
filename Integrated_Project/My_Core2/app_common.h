@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "app_config.h"
+#include "sensor_interface.h"
 
 #ifdef APP_COMMON_ENABLED
 
@@ -27,7 +28,9 @@ extern osSemaphoreId_t PS_BinarySemHandle;//光敏传感器模块使用的二进
 extern osSemaphoreId_t UR_BinarySemHandle;//超声波模块使用的二进制信号量
 extern osMutexId_t General_MutexHandle;//通用互斥锁
 extern osMessageQueueId_t KEY_QueueHandle;//按键队列 传递W25Q64状态
-extern osMessageQueueId_t USART_QueueHandle;//串口队列 传递LED状态 OLED状态
+extern osMessageQueueId_t USART_QueueHandle;//串口队列 传递LED状态
+extern osMessageQueueId_t OLED_Display_QueueHandle;//OLED队列，刷新OLED状态
+extern osMessageQueueId_t Sensor_Notify_QueueHandle;//取代Status_indication_led的轮询，改为通知
 
 //——————————枚举区 开始——————————
 //led状态枚举
@@ -51,6 +54,12 @@ typedef enum{
     OLED_State_Display_voltage,//显示光敏传感器的电压
     OLED_State_Display_distance//显示超声波测距距离
 }OLED_State;
+
+//传感器状态枚举
+typedef enum{
+    SENSOR_PS_UPDATAED,//更新 光敏传感器方
+    SENSOR_UR_UPDATAED,//更新 超声波模块方
+}SensorEvent;
 //——————————枚举区 结束——————————
 
 
@@ -79,6 +88,18 @@ typedef struct{
 typedef struct{
     W25Q64_State w25q64_state;
 }KEYMessage;
+
+//OLED队列 用于请求 OLED 显示某页面
+typedef struct {
+    OLED_State oled_state;   // 目标显示页面
+    bool force_refresh;      // 是否强制刷新（即使页面没变）
+    Sensor *Sensor;          // 指向要显示的传感器（电压页面 → &PS_Sensor，距离页面 → &UR_Sensor）
+} OLEDDisplayRequest;
+
+//UR PS消息通知队列
+typedef struct{
+    SensorEvent event;
+}SensorNotifyMsg;
 //——————————队列区 结束——————————
 
 
@@ -117,6 +138,8 @@ typedef struct{
 
 extern KEYMessage keymessage;//按键队列
 extern USARTMessage usartmessage;//串口队列
+extern OLEDDisplayRequest req;//OLED队列
+extern SensorNotifyMsg notify;//UR PS消息通知队列
 extern volatile AppState g_state;//全局APP状态
 
 #ifndef CPU_USAGE_ENABLED

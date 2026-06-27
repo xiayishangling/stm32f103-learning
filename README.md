@@ -60,7 +60,9 @@ Integrated_Project/
 │   ├── app_common.h         #   公共类型/枚举/队列/状态机 + AppState
 │   ├── app_globals.c/h      #   全局变量定义
 │   ├── key_task.c/h         #   按键 EXT I + 状态机消抖
-│   ├── led_task.c/h         #   LED 控制 + OLED 刷新 + 阈值指示灯
+│   ├── Controllable_led_task.c/h  #   可控 LED（PA3）
+│   ├── Heartbeat_led.c/h         #   心跳 LED（PA11）
+│   ├── Status_indication_led.c/h #   状态指示灯（PC13）
 │   ├── usart_task.c/h       #   串口接收 → CLI 命令入口
 │   ├── uart_dma.c/h         #   UART1 DMA 打印（带互斥锁 printf 替代）
 │   ├── cli.c/h              #   CLI 命令解析器（led/dist/lux/help/set/w25q64）
@@ -68,7 +70,9 @@ Integrated_Project/
 │   ├── oled_task.c/h        #   OLED 初始化 + 状态显示
 │   ├── ps_sensor.c/h        #   光敏传感器（ADC1 注入 + TIM1 TRGO）
 │   ├── ur_sensor.c/h        #   超声波测距（TIM2 输入捕获 CH1/CH2）
-│   └── dwt.c/h              #   DWT 微秒级延时
+│   ├── dwt.c/h              #   DWT 微秒级延时
+│   ├── sensor_interface.h    #   传感器统一接口抽象
+│   └── app_common_err.c/h    #   统一错误码 + 自动打印
 └── OLED_Driver/             # OLED 底层驱动（I2C）
 ```
 
@@ -105,19 +109,25 @@ Integrated_Project/
          ┌───────────────┼───────────────┐
          ↓               ↓               ↓
     ┌─────────┐    ┌──────────┐    ┌──────────┐
-    │ CLI 层   │    │ 队列层    │    │ 直接控制  │
+    │ CLI 层   │    │ 队列层    │    │ 通知层    │
     │          │    │          │    │          │
-    │ led on   │    │ USART    │    │ vIP_LED  │
-    │ led off  │    │  Queue   │    │  Task    │
-    │ lux  │    │   ↓      │    │          │
-    │ dist  │    │ LED      │    │ vIP_PC13 │
-    │ help     │    │  Task    │    │  Start   │
-    │          │    │          │    │  Task    │
-    └─────────┘    │ KEY      │    │          │
-                   │  Queue   │    │ vIP_PA11 │
-                   │   ↓      │    │  Flick   │
-                   │ W25Q64   │    │          │
-                   │  Task    │    └──────────┘
+    │ led on   │    │ USART    │    │ Sensor   │
+    │ led off  │    │  Queue   │    │ Notify   │
+    │ dist     │    │   ↓      │    │  Queue   │
+    │ lux      │    │ LED      │    │   ↓      │
+    │ set vthr │    │  Task    │    │ Status   │
+    │ set dthr │    │          │    │ Indi LED │
+    │ w25q64   │    │ OLED     │    │  Task    │
+    │ help     │    │  Queue   │    │          │
+    │          │    │   ↓      │    │ Heartbeat│
+    └─────────┘    │ OLED     │    │  LED     │
+                   │  Task    │    │  Task    │
+                   │          │    │          │
+                   │ KEY      │    └──────────┘
+                   │  Queue   │
+                   │   ↓      │
+                   │ W25Q64   │
+                   │  Task    │
                    └──────────┘
 ```
 
@@ -182,6 +192,7 @@ Integrated_Project/
 | 15 | 综合项目 RTOS 重构 | [docs/15-综合项目RTOS重构.md](docs/15-综合项目RTOS重构.md) |
 | 16 | 按键消抖模块化封装 | [docs/16-按键消抖模块化.md](docs/16-按键消抖模块化.md) |
 | 17 | 模块化头文件 & DMA 调试 | [docs/17-模块化头文件与DMA调试.md](docs/17-模块化头文件与DMA调试.md) |
+| 18 | 传感器接口抽象 & LED 模块拆分 | [docs/18-传感器接口抽象与LED模块拆分.md](docs/18-传感器接口抽象与LED模块拆分.md) |
 
 ---
 
@@ -204,6 +215,7 @@ Integrated_Project/
 - [x] FreeRTOS（任务、队列、信号量、互斥锁）
 - [x] DWT（微秒级延时）
 - [x] CLI（命令行交互控制）
+
 
 
 

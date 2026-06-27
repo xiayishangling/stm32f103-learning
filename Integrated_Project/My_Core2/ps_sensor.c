@@ -3,7 +3,7 @@
 //   结果存入 g_state.ps_voltage_v（单位 V，越大越暗）
 
 #include "ps_sensor.h"
-#include "uart_dma.h"
+#include "app_common_err.h"
 
 #ifdef PS_SENSOR_ENABLED
 
@@ -45,7 +45,9 @@ float Photosensitive_Sensor_State_Machine_IS(void)
             }
             else
             {
-                UART_DMA_Printf("PS_ISR_TIMEOUT\r\n");
+                //UART_DMA_Printf("PS_ISR_TIMEOUT\r\n");
+                float err_v = PS_ERR_Wait_ADC_JEOC_TIMEOUT;
+                g_state.ps_voltage_v = err_v;
                 g_state.ps_state = PS_Idle;
             }
             break;
@@ -57,7 +59,8 @@ float Photosensitive_Sensor_State_Machine_IS(void)
 
             v = (jdr * 3300) / 4095;
             g_state.ps_voltage_v = (v / 1000.0f);
-            //UART_DMA_Printf("voltage: %lu.%03lu mv\r\n", v / 1000, v % 1000);
+            SensorNotifyMsg notify = {.event = SENSOR_PS_UPDATAED};
+            osMessageQueuePut(Sensor_Notify_QueueHandle,&notify,0,0);
             g_state.ps_state = PS_Idle;
             break;
         }
@@ -81,5 +84,33 @@ void vIP_PS_IJ_Task(void *argument)
     }
 }
 
+// ===== PS_Sensor 接口包装 =====
+static int ps_read(Sensor *me)//测量是否成功？
+{
+    (void)me;
+    float v = Photosensitive_Sensor_State_Machine_IS();
+    if(v < 0) return -1;
+    return 0;
+}
+
+static float ps_get_value(Sensor *me)//成功取到 测量值
+{
+    (void)me;
+    return g_state.ps_voltage_v;
+}
+
+static const char *ps_get_uint(Sensor *me)
+{
+    (void)me;
+    return "V";
+}
+
+Sensor PS_Sensor = {
+    .name       = "Photosensitive",
+    .display_name = "Voltage",
+    .read       = ps_read,
+    .get_value  = ps_get_value,
+    .get_uint   = ps_get_uint,
+};
 #endif //PS_SENSOR_ENABLED
 

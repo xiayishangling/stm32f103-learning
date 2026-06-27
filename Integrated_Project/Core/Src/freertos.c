@@ -124,6 +124,13 @@ const osThreadAttr_t PC13_Task_attributes = {
   .stack_size = 64 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for ERR_Task */
+osThreadId_t ERR_TaskHandle;
+const osThreadAttr_t ERR_Task_attributes = {
+  .name = "ERR_Task",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* Definitions for KEY_Queue */
 osMessageQueueId_t KEY_QueueHandle;
 const osMessageQueueAttr_t KEY_Queue_attributes = {
@@ -133,6 +140,16 @@ const osMessageQueueAttr_t KEY_Queue_attributes = {
 osMessageQueueId_t USART_QueueHandle;
 const osMessageQueueAttr_t USART_Queue_attributes = {
   .name = "USART_Queue"
+};
+/* Definitions for OLED_Display_Queue */
+osMessageQueueId_t OLED_Display_QueueHandle;
+const osMessageQueueAttr_t OLED_Display_Queue_attributes = {
+  .name = "OLED_Display_Queue"
+};
+/* Definitions for Sensor_Notify_Queue */
+osMessageQueueId_t Sensor_Notify_QueueHandle;
+const osMessageQueueAttr_t Sensor_Notify_Queue_attributes = {
+  .name = "Sensor_Notify_Queue"
 };
 /* Definitions for General_Mutex */
 osMutexId_t General_MutexHandle;
@@ -176,6 +193,7 @@ void vIP_PS_IJ_Task(void *argument);
 void vIP_UR_Task(void *argument);
 void vIP_CLI_Task(void *argument);
 void vIP_PC13_StartTask(void *argument);
+void ERR_Printf_Task(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -224,6 +242,12 @@ void MX_FREERTOS_Init(void) {
   /* creation of USART_Queue */
   USART_QueueHandle = osMessageQueueNew (16, sizeof(USARTMessage), &USART_Queue_attributes);
 
+  /* creation of OLED_Display_Queue */
+  OLED_Display_QueueHandle = osMessageQueueNew (16, sizeof(OLEDDisplayRequest), &OLED_Display_Queue_attributes);
+
+  /* creation of Sensor_Notify_Queue */
+  Sensor_Notify_QueueHandle = osMessageQueueNew (8, sizeof(SensorNotifyMsg), &Sensor_Notify_Queue_attributes);
+
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
@@ -261,6 +285,9 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of PC13_Task */
   PC13_TaskHandle = osThreadNew(vIP_PC13_StartTask, NULL, &PC13_Task_attributes);
+
+  /* creation of ERR_Task */
+  ERR_TaskHandle = osThreadNew(ERR_Printf_Task, NULL, &ERR_Task_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -468,6 +495,24 @@ __weak void vIP_PC13_StartTask(void *argument)
     osDelay(1);
   }
   /* USER CODE END vIP_PC13_StartTask */
+}
+
+/* USER CODE BEGIN Header_ERR_Printf_Task */
+/**
+* @brief Function implementing the ERR_Task thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_ERR_Printf_Task */
+__weak void ERR_Printf_Task(void *argument)
+{
+  /* USER CODE BEGIN ERR_Printf_Task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END ERR_Printf_Task */
 }
 
 /* Private application code --------------------------------------------------*/

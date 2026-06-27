@@ -4,18 +4,16 @@
 
 #include "ur_sensor.h"
 #include "dwt.h"
-#include "uart_dma.h"
+#include "app_common_err.h"
 
 #ifdef UR_SENSOR_ENABLED
 
-#define UR_TIMEOUT_TIME 30 //ms
-#define UR_INTERVAL_TIME 2000 //ms
+#define UR_INTERVAL_TIME 1000 //ms
 #define UR_SEND_PULSE_GPIO_PORT PB14_TIM2_UR_GPIO_Port
 #define UR_SEND_PULSE_GPIO_PIN PB14_TIM2_UR_Pin
 #define UR_TIM_HANDLE htim2
 
 static uint8_t capture_flag = 0;
-//static uint32_t ur_currentTick = 0;
 
 //超声波CC1 CC2 中断 检查标志位
 // TIM2 CH1/CH2 输入捕获中断 → 两个通道都触发后释放信号量
@@ -49,6 +47,7 @@ float Ultrasonic_Ranging_State_Machine(void)
     uint32_t ccr1 = 0;
     uint32_t ccr2 = 0;
     float distance = 0;
+    static uint8_t ur_err_outrange_count = 0;
     switch (g_state.ur_state)
     {
     case UR_Send_Pulse_to_Trig:
@@ -81,10 +80,11 @@ float Ultrasonic_Ranging_State_Machine(void)
             }
             else
             {
-                UART_DMA_Printf("UR_TimeOUt\r\n");
+                distance = UR_ERR_WAIT_ECHO_TIMEOUT;
+                g_state.ur_distance_m = distance;
                 g_state.ur_state = UR_Idle;
+                break;
             }
-            break;
         }	
 
     case UR_Process:
@@ -96,8 +96,25 @@ float Ultrasonic_Ranging_State_Machine(void)
             {
                 distance = (width*1.0e-6f*340.0f)/2.0f;
                 g_state.ur_distance_m = distance;
-                //UART_DMA_Printf("distance: %.3f m\r\n",distance);
+                SensorNotifyMsg notify = {.event = SENSOR_UR_UPDATAED};
+                osMessageQueuePut(Sensor_Notify_QueueHandle,&notify,0,0);
+                                
+                ur_err_outrange_count = 0;              
             }
+            else
+            {
+                ur_err_outrange_count++;
+                if(ur_err_outrange_count >= 3)//连续三次以上测量不成功 才返回测量失败
+                {
+                    distance = UR_ERR_OUTRANGE;
+                    g_state.ur_distance_m = distance;
+                    ur_err_outrange_count = 0;
+                }
+                else
+                {
+                    g_state.ur_distance_m = distance;//维持上一次状态
+                }
+            }    
             g_state.ur_state = UR_Idle;
             break;
         }
@@ -106,7 +123,7 @@ float Ultrasonic_Ranging_State_Machine(void)
         {
             HAL_TIM_IC_Stop_IT(&UR_TIM_HANDLE,TIM_CHANNEL_1);
             HAL_TIM_IC_Stop_IT(&UR_TIM_HANDLE,TIM_CHANNEL_2);
-            osDelay(pdMS_TO_TICKS(UR_INTERVAL_TIME));//测量间隔 2s
+            osDelay(pdMS_TO_TICKS(UR_INTERVAL_TIME));//测量间隔 1s
             g_state.ur_state = UR_Send_Pulse_to_Trig;                
             break;
         }
@@ -122,5 +139,33 @@ void vIP_UR_Task(void *argument)
     }
 }
 
+// ===== UR_Sensor 接口包装 =====
+static int ur_read(Sensor *me)
+{
+    (void)me;
+    float d = Ultrasonic_Ranging_State_Machine();
+    if(d < 0) return -1;
+    return 0;
+}
+
+static float ur_get_value(Sensor *me)
+{
+    (void)me;
+    return g_state.ur_distance_m;
+}
+
+static const char *ur_get_uint(Sensor *me)
+{
+    (void)me;
+    return "m";
+}
+
+Sensor UR_Sensor = {
+    .name = "Ultrasonic",
+    .display_name = "Distance",
+    .read = ur_read,
+    .get_value = ur_get_value,
+    .get_uint = ur_get_uint,
+};
 #endif //UR_SENSOR_ENABLED
 

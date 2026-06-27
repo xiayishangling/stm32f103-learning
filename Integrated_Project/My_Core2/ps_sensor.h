@@ -7,13 +7,12 @@
 #include "tim.h"
 
 #ifdef PS_SENSOR_ENABLED
-void     vIP_PS_IJ_Task(void *argument);// 运行光敏状态机
-#endif
-
-#ifdef PS_SENSOR_ENABLED
+void vIP_PS_IJ_Task(void *argument);// 运行光敏状态机
 float Photosensitive_Sensor_State_Machine_IS(void);// 状态机（返回值 /1000 = V）
 #else
 #define Photosensitive_Sensor_State_Machine_IS()
-#endif
+#endif //PS_SENSOR_ENABLED
 
-#endif
+extern Sensor PS_Sensor;
+
+#endif //INC_PS_SENSOR_H_

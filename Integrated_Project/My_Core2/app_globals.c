@@ -3,12 +3,6 @@
 
 #include "app_common.h"
 
-//————————————无用全局变量 留痕 开始————————————
-// volatile LED_State g_state.led = LED_State_OFF;
-// W25Q64_State current_w25q64_mode;
-// volatile OLED_State g_state.oled = OLED_State_Display3;
-//————————————无用全局变量 留痕 结束————————————
-
 // APP全局当前状态初始值，所有任务通过读写 g_state 协同工作
 volatile AppState g_state = {
     .led = LED_State_OFF,              // LED 初始关闭

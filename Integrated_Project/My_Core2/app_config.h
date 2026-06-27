@@ -8,7 +8,10 @@
 #define APP_COMMON_ENABLED     // 公共类型/枚举（必须开启）
 
 // ----- 模块开关 -----
-#define LED_MODULE_ENABLED     // LED（PA3）+ OLED 显示刷新 + PC13 阈值控制 + PA11 闪烁
+#define CONTROLLABLE_LED_MODULE_ENABLED     // LED（PA3）+ OLED 显示刷新 + PC13 阈值控制 + PA11 闪烁
+#define HEARTBEAT_LED_MODULE_ENABLED        // PA11 心跳闪烁（500ms 周期）
+#define STATUS_INDICATION_LED_MODULE_ENABLED    //状态指示LED PC13
+
 #define USART_MODULE_ENABLED   // 串口1 接收 + CLI 命令入口
 #define KEY_MODULE_ENABLED     // 按键（PA1/PA2）+ EXTI 回调
 #define KEY_MODULE2_ENABLED    //状态机消抖回调
@@ -19,5 +22,7 @@
 #define CLI_MODULE_ENABLED     // CLI 命令表 + led/dist/lux/help/set
 #define DWT_MODULE_ENABLED     // 微秒级延时（DWT->CYCCNT）
 //#define CPU_USAGE_ENABLED     // CPU 使用率测量（TIM3）
+
+#define ERR_AUTOMATIC_PRINTING_MODULE_ENABLED //错误自动打印
 
 #endif
